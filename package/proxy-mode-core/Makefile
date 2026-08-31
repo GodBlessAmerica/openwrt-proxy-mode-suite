@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=9
+PKG_RELEASE:=10
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
@@ -40,15 +40,19 @@ endef
 
 define Package/proxy-mode-core/install
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(SUITE_ROOT)/core/usr/bin/proxy-mode $(1)/usr/bin/proxy-mode
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/proxy-mode-wrapper.sh $(1)/usr/bin/proxy-mode
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/preflight.sh $(1)/usr/bin/proxy-mode-preflight
+
+	$(INSTALL_DIR) $(1)/usr/libexec
+	$(INSTALL_BIN) $(SUITE_ROOT)/core/usr/bin/proxy-mode $(1)/usr/libexec/proxy-mode-core
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/export-config.sh $(1)/usr/libexec/proxy-mode-export
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/import-config.sh $(1)/usr/libexec/proxy-mode-import
+
+	$(INSTALL_DIR) $(1)/etc/hotplug.d/iface
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/99-proxy-mode $(1)/etc/hotplug.d/iface/99-proxy-mode
 
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) $(SUITE_ROOT)/core/etc/config/proxy-mode $(1)/etc/config/proxy-mode
-
-	$(INSTALL_DIR) $(1)/usr/libexec
-	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/export-config.sh $(1)/usr/libexec/proxy-mode-export
-	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/import-config.sh $(1)/usr/libexec/proxy-mode-import
 endef
 
 define Package/proxy-mode-core/postinst
@@ -73,6 +77,7 @@ elif [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.js
 	uci set sing-box.main.enabled='1'
 fi
 uci commit sing-box
+/etc/init.d/sing-box enable >/dev/null 2>&1 || true
 exit 0
 endef
 
