@@ -5,6 +5,7 @@ PKG_VERSION:=1.0.0
 PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
+PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -15,7 +16,6 @@ define Package/luci-app-proxy-mode
   CATEGORY:=LuCI
   SUBMENU:=3. Applications
   TITLE:=LuCI support for Proxy Mode Suite
-  PKGARCH:=all
   DEPENDS:=+proxy-mode-core +luci-base +rpcd-mod-file +uhttpd-mod-ubus
 endef
 
