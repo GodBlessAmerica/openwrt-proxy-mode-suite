@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=8
+PKG_RELEASE:=9
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
@@ -62,7 +62,13 @@ mkdir -p /etc/sing-box
 uci -q get sing-box.main >/dev/null 2>&1 || uci set sing-box.main='sing-box'
 uci set sing-box.main.user='root'
 uci -q get sing-box.main.ipv6_mode >/dev/null 2>&1 || uci set sing-box.main.ipv6_mode='allow'
-if [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.json >/dev/null 2>&1; then
+
+# Preserve an existing active configuration. Only bootstrap mode1 on a fresh
+# installation where no valid conffile is already configured.
+current_conffile="$$(uci -q get sing-box.main.conffile 2>/dev/null || true)"
+if [ -n "$$current_conffile" ] && [ -f "$$current_conffile" ] && sing-box check -c "$$current_conffile" >/dev/null 2>&1; then
+	:
+elif [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.json >/dev/null 2>&1; then
 	uci set sing-box.main.conffile='/etc/sing-box/mode1.json'
 	uci set sing-box.main.enabled='1'
 fi
