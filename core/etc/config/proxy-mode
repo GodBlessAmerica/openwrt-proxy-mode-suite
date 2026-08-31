@@ -1,0 +1,2 @@
+config mode 'mode1'
+	option name 'Example Mode 1'
