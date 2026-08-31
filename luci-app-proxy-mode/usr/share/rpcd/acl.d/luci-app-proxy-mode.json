@@ -1,0 +1,17 @@
+{
+  "luci-app-proxy-mode": {
+    "description": "Grant access to Proxy Mode control and mode manager",
+    "read": {
+      "file": {
+        "/usr/bin/proxy-mode": [ "exec" ],
+        "/usr/libexec/proxy-mode-ui": [ "exec" ]
+      }
+    },
+    "write": {
+      "file": {
+        "/usr/bin/proxy-mode": [ "exec" ],
+        "/usr/libexec/proxy-mode-ui": [ "exec" ]
+      }
+    }
+  }
+}
