@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=3
+PKG_RELEASE:=4
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
@@ -36,6 +36,7 @@ endef
 define Package/proxy-mode-core/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(SUITE_ROOT)/core/usr/bin/proxy-mode $(1)/usr/bin/proxy-mode
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/preflight.sh $(1)/usr/bin/proxy-mode-preflight
 
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) $(SUITE_ROOT)/core/etc/config/proxy-mode $(1)/etc/config/proxy-mode
