@@ -2,14 +2,14 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=4
+PKG_RELEASE:=5
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
 
-SUITE_ROOT:=$(CURDIR)/..
+SUITE_ROOT:=$(abspath $(CURDIR)/../..)
 
 define Package/proxy-mode-core
   SECTION:=net
