@@ -6,13 +6,20 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 command -v sing-box >/dev/null 2>&1 || { echo 'ERROR: sing-box is not installed' >&2; exit 1; }
 command -v uci >/dev/null 2>&1 || { echo 'ERROR: uci not found' >&2; exit 1; }
 command -v jsonfilter >/dev/null 2>&1 || { echo 'ERROR: jsonfilter not found' >&2; exit 1; }
+[ -x /etc/init.d/sing-box ] || { echo 'ERROR: official /etc/init.d/sing-box not found' >&2; exit 1; }
+[ -f /etc/config/sing-box ] || { echo 'ERROR: official /etc/config/sing-box not found' >&2; exit 1; }
 [ -d /usr/share/luci ] || { echo 'ERROR: LuCI not installed' >&2; exit 1; }
 
 TS="$(date +%Y%m%d-%H%M%S)"
 BACKUP="/root/proxy-mode-suite-backup-$TS"
 mkdir -p "$BACKUP"
-FILES='/usr/bin/proxy-mode /usr/libexec/proxy-mode-ui /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js /etc/config/proxy-mode /etc/init.d/sing-box /etc/config/sing-box'
+FILES='/usr/bin/proxy-mode /usr/libexec/proxy-mode-ui /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js /etc/config/proxy-mode'
 for f in $FILES; do
+  if [ -e "$f" ]; then mkdir -p "$BACKUP$(dirname "$f")"; cp -p "$f" "$BACKUP$f"; fi
+done
+# Keep a copy of official sing-box UCI state for rollback/reference, but never replace
+# the official package-owned init script or config file from this repository.
+for f in /etc/config/sing-box; do
   if [ -e "$f" ]; then mkdir -p "$BACKUP$(dirname "$f")"; cp -p "$f" "$BACKUP$f"; fi
 done
 printf '%s\n' "$BACKUP" > /etc/proxy-mode-suite-last-backup
@@ -26,14 +33,21 @@ cp "$ROOT/luci-app-proxy-mode/www/luci-static/resources/view/proxy-mode.js" /www
 chmod 755 /usr/bin/proxy-mode /usr/libexec/proxy-mode-ui
 
 [ -f /etc/config/proxy-mode ] || cp "$ROOT/core/etc/config/proxy-mode" /etc/config/proxy-mode
-[ -f /etc/init.d/sing-box ] || { cp "$ROOT/core/etc/init.d/sing-box" /etc/init.d/sing-box; chmod 755 /etc/init.d/sing-box; }
-[ -f /etc/config/sing-box ] || cp "$ROOT/core/etc/config/sing-box.example" /etc/config/sing-box
 mkdir -p /etc/sing-box
+
+uci set sing-box.main.user='root'
+uci -q get sing-box.main.ipv6_mode >/dev/null 2>&1 || uci set sing-box.main.ipv6_mode='allow'
+if [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.json >/dev/null 2>&1; then
+  uci set sing-box.main.conffile='/etc/sing-box/mode1.json'
+  uci set sing-box.main.enabled='1'
+fi
+uci commit sing-box
 
 rm -f /tmp/luci-indexcache
 /etc/init.d/rpcd restart
 /etc/init.d/uhttpd restart
 
 echo "Installed OpenWrt Proxy Mode Suite."
+echo "Official sing-box service files were preserved."
 echo "Backup: $BACKUP"
 echo "LuCI: Services -> Proxy Mode"
