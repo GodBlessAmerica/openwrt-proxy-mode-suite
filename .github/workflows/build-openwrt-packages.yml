@@ -71,27 +71,12 @@ jobs:
           tar -xf "$RUNNER_TEMP/$SDK_FILE" -C "$RUNNER_TEMP/openwrt-sdk" --strip-components=1
           echo "SDK_DIR=$RUNNER_TEMP/openwrt-sdk" >> "$GITHUB_ENV"
 
-      - name: Prepare feeds
+      - name: Prepare SDK and feeds
         shell: bash
         run: |
           set -euo pipefail
-          cd "$SDK_DIR"
-          ./scripts/feeds update packages luci
-          ./scripts/feeds install sing-box
-          ./scripts/feeds install luci-base
-
-      - name: Add Proxy Mode Suite packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$SDK_DIR"
-          mkdir -p package/proxy-mode-suite
-          ln -s "$GITHUB_WORKSPACE/package/proxy-mode-core" package/proxy-mode-suite/proxy-mode-core
-          ln -s "$GITHUB_WORKSPACE/package/luci-app-proxy-mode" package/proxy-mode-suite/luci-app-proxy-mode
-          ln -s "$GITHUB_WORKSPACE/core" package/proxy-mode-suite/core
-          ln -s "$GITHUB_WORKSPACE/luci-app-proxy-mode" package/proxy-mode-suite/luci-app-proxy-mode-src
-          ln -s "$GITHUB_WORKSPACE/scripts" package/proxy-mode-suite/scripts
-          make defconfig
+          chmod +x "$GITHUB_WORKSPACE/scripts/prepare-sdk.sh"
+          "$GITHUB_WORKSPACE/scripts/prepare-sdk.sh" "$SDK_DIR"
 
       - name: Build packages
         shell: bash
