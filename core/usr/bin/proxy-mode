@@ -1,0 +1,265 @@
+#!/bin/sh
+
+SERVICE="/etc/init.d/sing-box"
+FIREWALL_SERVICE="/etc/init.d/firewall"
+UCI_KEY="sing-box.main.conffile"
+IPV6_UCI_KEY="sing-box.main.ipv6_mode"
+FW_FORWARD_SECTION="proxy_mode_ipv6_forward"
+FW_OUTPUT_SECTION="proxy_mode_ipv6_output"
+MODE_REGISTRY="proxy-mode"
+
+is_running() {
+    pgrep -f '/usr/bin/sing-box run' >/dev/null 2>&1
+}
+
+get_ipv6_mode() {
+    value="$(uci -q get "$IPV6_UCI_KEY")"
+    case "$value" in
+        block|allow) echo "$value" ;;
+        *) echo "allow" ;;
+    esac
+}
+
+valid_mode_number() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+        0) return 1 ;;
+        *) [ "$1" -le 999 ] 2>/dev/null ;;
+    esac
+}
+
+mode_number_from_config() {
+    base="$(basename -- "$1" 2>/dev/null)"
+    number="$(printf '%s\n' "$base" | sed -n 's/^mode\([0-9][0-9]*\)\(-ipv6-block\)\{0,1\}\.json$/\1/p')"
+    valid_mode_number "$number" || return 1
+    echo "$number"
+}
+
+mode_name() {
+    number="$1"
+    name="$(uci -q get "${MODE_REGISTRY}.mode${number}.name")"
+    [ -n "$name" ] || name="Mode ${number}"
+    echo "$name"
+}
+
+mode_description() {
+    number="$1"
+    if valid_mode_number "$number"; then
+        echo "模式${number}：$(mode_name "$number")"
+    else
+        echo "未知模式"
+    fi
+}
+
+base_config_for_mode() { echo "/etc/sing-box/mode${1}.json"; }
+blocked_config_for_mode() { echo "/etc/sing-box/mode${1}-ipv6-block.json"; }
+
+generate_blocked_config() {
+    base="$1"; output="$2"; tmp="${output}.tmp.$$"
+    dns_strategy="$(jsonfilter -i "$base" -e '@.dns.strategy' 2>/dev/null)"
+    add_dns=0; add_resolve=0; add_reject=0
+
+    case "$dns_strategy" in
+        "") add_dns=1 ;;
+        ipv4_only) ;;
+        *) echo "错误：$base 已有 DNS strategy=$dns_strategy，拒绝自动覆盖。"; return 1 ;;
+    esac
+
+    grep -Eq '^[[:space:]]*\{"action":[[:space:]]*"resolve",[[:space:]]*"strategy":[[:space:]]*"ipv4_only"\},[[:space:]]*$' "$base" || add_resolve=1
+    grep -Eq '^[[:space:]]*\{"ip_version":[[:space:]]*6,[[:space:]]*"action":[[:space:]]*"reject"\},[[:space:]]*$' "$base" || add_reject=1
+
+    if ! awk -v add_dns="$add_dns" -v add_resolve="$add_resolve" -v add_reject="$add_reject" '
+        {
+            line = $0
+            if (line ~ /^[[:space:]]*"route"[[:space:]]*:[[:space:]]*\{[[:space:]]*$/) in_route = 1
+            if (in_route && line ~ /"protocol"[[:space:]]*:[[:space:]]*"dns"/) in_dns_rule = 1
+            if (in_dns_rule && line ~ /"action"[[:space:]]*:[[:space:]]*"hijack-dns"/) saw_hijack = 1
+            print line
+            if (add_dns == 1 && !dns_added && line ~ /^[[:space:]]*"dns"[[:space:]]*:[[:space:]]*\{[[:space:]]*$/) {
+                print "    \"strategy\": \"ipv4_only\","; dns_added = 1
+            }
+            if (in_route && saw_hijack && line ~ /^[[:space:]]*\},[[:space:]]*$/ && !route_added) {
+                if (add_resolve == 1) print "      {\"action\": \"resolve\", \"strategy\": \"ipv4_only\"},"
+                if (add_reject == 1) print "      {\"ip_version\": 6, \"action\": \"reject\"},"
+                route_added = 1; in_dns_rule = 0; saw_hijack = 0
+            }
+        }
+        END {
+            if (add_dns == 1 && !dns_added) exit 41
+            if ((add_resolve == 1 || add_reject == 1) && !route_added) exit 42
+        }
+    ' "$base" > "$tmp"; then
+        echo "错误：无法在 $base 中定位 dns 或 DNS 劫持规则。"
+        rm -f "$tmp"; return 1
+    fi
+
+    if ! sing-box check -c "$tmp"; then
+        echo "错误：生成的 IPv6 阻止配置检查失败：$base"
+        rm -f "$tmp"; return 1
+    fi
+    chmod 600 "$tmp"; mv "$tmp" "$output"
+}
+
+prepare_mode_config() {
+    number="$1"; ipv6_mode="$2"
+    valid_mode_number "$number" || { echo "错误：无效模式编号：$number"; return 1; }
+    base="$(base_config_for_mode "$number")"
+    [ -f "$base" ] || { echo "错误：配置文件不存在：$base"; return 1; }
+    case "$ipv6_mode" in
+        block)
+            selected="$(blocked_config_for_mode "$number")"
+            echo "正在生成模式${number}的 IPv6 阻止配置……"
+            generate_blocked_config "$base" "$selected" || return 1 ;;
+        allow)
+            selected="$base"
+            sing-box check -c "$selected" || { echo "错误：模式${number}配置检查失败。"; return 1; } ;;
+        *) echo "错误：未知 IPv6 模式：$ipv6_mode"; return 1 ;;
+    esac
+    SELECTED_CONFIG="$selected"
+}
+
+firewall_is_blocking_ipv6() {
+    [ "$(uci -q get "firewall.${FW_FORWARD_SECTION}")" = "rule" ] &&
+    [ "$(uci -q get "firewall.${FW_FORWARD_SECTION}.src")" = "lan" ] &&
+    [ "$(uci -q get "firewall.${FW_FORWARD_SECTION}.dest")" = "wan" ] &&
+    [ "$(uci -q get "firewall.${FW_FORWARD_SECTION}.family")" = "ipv6" ] &&
+    [ "$(uci -q get "firewall.${FW_FORWARD_SECTION}.target")" = "REJECT" ] &&
+    [ "$(uci -q get "firewall.${FW_OUTPUT_SECTION}")" = "rule" ] &&
+    [ "$(uci -q get "firewall.${FW_OUTPUT_SECTION}.dest")" = "wan" ] &&
+    [ "$(uci -q get "firewall.${FW_OUTPUT_SECTION}.family")" = "ipv6" ] &&
+    [ "$(uci -q get "firewall.${FW_OUTPUT_SECTION}.target")" = "REJECT" ]
+}
+
+enable_ipv6_firewall() {
+    firewall_is_blocking_ipv6 && return 0
+    uci set "firewall.${FW_FORWARD_SECTION}=rule" || return 1
+    uci set "firewall.${FW_FORWARD_SECTION}.name=Proxy-Mode-Block-LAN-IPv6" || return 1
+    uci set "firewall.${FW_FORWARD_SECTION}.src=lan" || return 1
+    uci set "firewall.${FW_FORWARD_SECTION}.dest=wan" || return 1
+    uci set "firewall.${FW_FORWARD_SECTION}.family=ipv6" || return 1
+    uci set "firewall.${FW_FORWARD_SECTION}.proto=all" || return 1
+    uci set "firewall.${FW_FORWARD_SECTION}.target=REJECT" || return 1
+    uci set "firewall.${FW_FORWARD_SECTION}.enabled=1" || return 1
+    uci set "firewall.${FW_OUTPUT_SECTION}=rule" || return 1
+    uci set "firewall.${FW_OUTPUT_SECTION}.name=Proxy-Mode-Block-Router-IPv6" || return 1
+    uci set "firewall.${FW_OUTPUT_SECTION}.dest=wan" || return 1
+    uci set "firewall.${FW_OUTPUT_SECTION}.family=ipv6" || return 1
+    uci set "firewall.${FW_OUTPUT_SECTION}.proto=all" || return 1
+    uci set "firewall.${FW_OUTPUT_SECTION}.target=REJECT" || return 1
+    uci set "firewall.${FW_OUTPUT_SECTION}.enabled=1" || return 1
+    uci commit firewall || return 1
+    "$FIREWALL_SERVICE" restart
+}
+
+disable_ipv6_firewall() {
+    if ! uci -q get "firewall.${FW_FORWARD_SECTION}" >/dev/null 2>&1 && ! uci -q get "firewall.${FW_OUTPUT_SECTION}" >/dev/null 2>&1; then return 0; fi
+    uci -q delete "firewall.${FW_FORWARD_SECTION}"
+    uci -q delete "firewall.${FW_OUTPUT_SECTION}"
+    uci commit firewall || return 1
+    "$FIREWALL_SERVICE" restart
+}
+
+sync_ipv6_firewall() { case "$1" in block) enable_ipv6_firewall ;; allow) disable_ipv6_firewall ;; *) return 1 ;; esac; }
+
+show_ipv6_status() {
+    ipv6_mode="$(get_ipv6_mode)"; current="$(uci -q get "$UCI_KEY")"
+    case "$ipv6_mode" in
+        block)
+            echo "IPv6 防泄露：已开启（IPv6 已阻止）"
+            firewall_is_blocking_ipv6 && echo "IPv6 防火墙：正常（LAN 和路由器自身均已阻止）" || echo "IPv6 防火墙：异常或缺失"
+            if [ -n "$current" ] && [ -f "$current" ]; then
+                dns_strategy="$(jsonfilter -i "$current" -e '@.dns.strategy' 2>/dev/null)"
+                [ "$dns_strategy" = "ipv4_only" ] && echo "DNS 策略：仅 IPv4" || echo "DNS 策略：异常"
+                grep -Eq '"ip_version"[[:space:]]*:[[:space:]]*6' "$current" && echo "sing-box IPv6 规则：正常" || echo "sing-box IPv6 规则：缺失"
+            fi ;;
+        allow)
+            echo "IPv6 防泄露：已关闭（允许 IPv6）"
+            echo "警告：出口没有 IPv6 时，允许 IPv6 可能绕过代理出口。" ;;
+    esac
+}
+
+show_status() {
+    current="$(uci -q get "$UCI_KEY")"; number="$(mode_number_from_config "$current" 2>/dev/null)"
+    echo "当前模式：$(mode_description "$number")"
+    echo "配置文件：${current:-未设置}"
+    show_ipv6_status
+    if is_running; then echo "运行状态：正常"; pgrep -af '[s]ing-box'; else echo "运行状态：已停止"; fi
+}
+
+restore_ipv6_state() {
+    old_config="$1"; old_raw="$2"; old_mode="$3"
+    [ -z "$old_config" ] || uci set "$UCI_KEY=$old_config"
+    if [ -n "$old_raw" ]; then uci set "$IPV6_UCI_KEY=$old_raw"; else uci -q delete "$IPV6_UCI_KEY"; fi
+    uci commit sing-box
+    sync_ipv6_firewall "$old_mode" >/dev/null 2>&1
+}
+
+set_ipv6_mode() {
+    requested="$1"; old_config="$(uci -q get "$UCI_KEY")"; old_raw="$(uci -q get "$IPV6_UCI_KEY")"; old_mode="$(get_ipv6_mode)"
+    number="$(mode_number_from_config "$old_config" 2>/dev/null)"; was_running=0
+    [ -n "$number" ] || { echo "错误：无法判断当前模式：${old_config:-未设置}"; return 1; }
+    is_running && was_running=1
+    prepare_mode_config "$number" "$requested" || return 1
+    new_config="$SELECTED_CONFIG"
+    if ! sync_ipv6_firewall "$requested"; then echo "错误：IPv6 防火墙更新失败。"; sync_ipv6_firewall "$old_mode" >/dev/null 2>&1; return 1; fi
+    if ! uci set "$UCI_KEY=$new_config" || ! uci set "$IPV6_UCI_KEY=$requested" || ! uci commit sing-box; then
+        echo "错误：IPv6 状态保存失败，正在回滚。"; restore_ipv6_state "$old_config" "$old_raw" "$old_mode"; return 1
+    fi
+    if [ "$was_running" -eq 1 ]; then
+        "$SERVICE" restart; sleep 4
+        if ! is_running; then
+            echo "错误：sing-box 启动失败，正在恢复修改前状态。"
+            restore_ipv6_state "$old_config" "$old_raw" "$old_mode"; "$SERVICE" restart; sleep 3; logread -l 30 -e sing-box; return 1
+        fi
+    fi
+    echo "IPv6 设置已更新。"; show_status
+}
+
+switch_mode() {
+    number="$1"; valid_mode_number "$number" || { echo "错误：无效模式编号：$number"; return 1; }
+    old_config="$(uci -q get "$UCI_KEY")"; ipv6_mode="$(get_ipv6_mode)"
+    prepare_mode_config "$number" "$ipv6_mode" || return 1
+    new_config="$SELECTED_CONFIG"
+    sync_ipv6_firewall "$ipv6_mode" || { echo "错误：IPv6 防火墙同步失败。"; return 1; }
+    echo "正在检查模式${number}配置……"
+    sing-box check -c "$new_config" || { echo "错误：模式${number}配置检查失败，未执行切换。"; return 1; }
+    [ "$old_config" = "$new_config" ] && echo "当前已经是模式${number}，正在重启服务……" || echo "正在切换到模式${number}……"
+    uci set "$UCI_KEY=$new_config"; uci commit sing-box; "$SERVICE" restart; sleep 4
+    if is_running; then echo "模式${number}启动成功。"; show_status; return 0; fi
+    echo "模式${number}启动失败。"
+    if [ -n "$old_config" ] && [ -f "$old_config" ]; then
+        echo "正在恢复原配置：$old_config"; uci set "$UCI_KEY=$old_config"; uci commit sing-box; "$SERVICE" restart; sleep 3
+    fi
+    logread -l 30 -e sing-box; return 1
+}
+
+prepare_current_config() {
+    current="$(uci -q get "$UCI_KEY")"; number="$(mode_number_from_config "$current" 2>/dev/null)"; ipv6_mode="$(get_ipv6_mode)"
+    [ -n "$number" ] || { echo "错误：无法判断当前模式：${current:-未设置}"; return 1; }
+    prepare_mode_config "$number" "$ipv6_mode" || return 1
+    sync_ipv6_firewall "$ipv6_mode" || return 1
+    uci set "$UCI_KEY=$SELECTED_CONFIG"; uci commit sing-box
+}
+
+case "$1" in
+    ipv6) case "$2" in block|allow) set_ipv6_mode "$2" ;; status|"") show_ipv6_status ;; *) echo "用法：proxy-mode ipv6 block|allow|status"; exit 1 ;; esac ;;
+    status) show_status ;;
+    restart) prepare_current_config || exit 1; "$SERVICE" restart; sleep 3; show_status ;;
+    stop) "$SERVICE" stop; echo "代理服务已停止；IPv6 防火墙状态保持不变。" ;;
+    start) prepare_current_config || exit 1; "$SERVICE" start; sleep 3; show_status ;;
+    log) logread -l 60 -e sing-box ;;
+    follow) logread -f -e sing-box ;;
+    *)
+        if valid_mode_number "$1"; then switch_mode "$1"; else
+            echo "用法："
+            echo "  proxy-mode <number>      切换代理模式（1..999）"
+            echo "  proxy-mode ipv6 block    阻止 IPv6，防止泄露"
+            echo "  proxy-mode ipv6 allow    允许 IPv6"
+            echo "  proxy-mode ipv6 status   查看 IPv6 状态"
+            echo "  proxy-mode status        查看当前模式"
+            echo "  proxy-mode restart       重启当前模式"
+            echo "  proxy-mode start|stop    启动或停止代理"
+            echo "  proxy-mode log|follow    查看日志"
+            exit 1
+        fi ;;
+esac
