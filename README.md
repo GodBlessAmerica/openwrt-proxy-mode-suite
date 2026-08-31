@@ -2,7 +2,28 @@
 
 Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 leak protection, safe configuration validation, migration tooling, and reproducible OpenWrt package builds.
 
-> Status: **v1.0 packaging candidate**. Runtime and LuCI are split into standard OpenWrt packages; CI builds against a selected official OpenWrt SDK and can publish GitHub Releases.
+> Status: **v1.0.0-rc1 packaging candidate**. Runtime and LuCI are split into standard OpenWrt packages; CI builds against a selected official OpenWrt SDK and can publish GitHub Releases.
+
+## Ownership boundary
+
+The suite intentionally **does not replace the official OpenWrt sing-box package**.
+
+The official `sing-box` package owns:
+
+- `/usr/bin/sing-box`
+- `/etc/init.d/sing-box`
+- `/etc/config/sing-box`
+- `/etc/sing-box/`
+
+Proxy Mode Suite owns only its management layer:
+
+- `/usr/bin/proxy-mode`
+- `/etc/config/proxy-mode`
+- `/usr/libexec/proxy-mode-*`
+- LuCI menu / ACL / JavaScript view
+- Mode lifecycle, IPv6 policy, validation, export/import
+
+This separation avoids package-file conflicts and lets OpenWrt update sing-box normally.
 
 ## Features
 
@@ -24,11 +45,10 @@ Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 
 ```text
 .
 ├── README.md
+├── VERSION
 ├── LICENSE
 ├── core/
 │   ├── etc/config/proxy-mode
-│   ├── etc/config/sing-box.example
-│   ├── etc/init.d/sing-box
 │   └── usr/bin/proxy-mode
 ├── luci-app-proxy-mode/
 │   ├── usr/libexec/proxy-mode-ui
@@ -61,14 +81,14 @@ Base configurations live on the router under `/etc/sing-box/modeN.json`. Generat
 
 ## Install from source
 
-On a compatible OpenWrt system with sing-box and LuCI already installed:
+On a compatible OpenWrt system with the official sing-box package and LuCI already installed:
 
 ```sh
 chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-The source installer backs up files it is about to replace.
+The source installer preserves the official sing-box init/UCI files. It sets `sing-box.main.user=root` because this project targets TUN-capable configurations. If a valid `/etc/sing-box/mode1.json` already exists, it may be selected as the initial mode; otherwise the installer does not start an empty proxy configuration.
 
 See [`docs/INSTALL.md`](docs/INSTALL.md).
 
@@ -79,7 +99,7 @@ GitHub Actions builds two packages:
 - `proxy-mode-core`
 - `luci-app-proxy-mode`
 
-On newer OpenWrt releases using APK, installation will look like:
+On newer OpenWrt releases using APK:
 
 ```sh
 apk add ./proxy-mode-core_*.apk
@@ -147,7 +167,7 @@ The project was generalized from a working installation using:
 - LuCI 26.180
 - `rpcd-mod-file`
 - `uhttpd-mod-ubus`
-- sing-box managed by procd
+- sing-box managed by the official OpenWrt procd service
 
 The suite code itself is POSIX shell, UCI and LuCI JavaScript and is packaged as architecture independent. The sing-box package remains an architecture-specific external dependency supplied by the selected OpenWrt feed.
 
