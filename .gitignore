@@ -1,0 +1,28 @@
+# Runtime/private sing-box configurations
+mode*.json
+mode*-ipv6-block.json
+*.backup
+*.tar.gz
+*.tgz
+
+# Credentials and keys
+*.key
+*.pem
+ssh_key*
+id_*
+.env
+.env.*
+!.env.example
+
+# Local build output
+bin/
+build/
+dist/
+*.apk
+*.ipk
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
