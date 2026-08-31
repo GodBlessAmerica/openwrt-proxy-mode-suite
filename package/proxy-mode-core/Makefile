@@ -8,6 +8,8 @@ PKG_MAINTAINER:=GodBlessAmerica
 
 include $(INCLUDE_DIR)/package.mk
 
+SUITE_ROOT:=$(CURDIR)/../..
+
 define Package/proxy-mode-core
   SECTION:=net
   CATEGORY:=Network
@@ -32,18 +34,18 @@ endef
 
 define Package/proxy-mode-core/install
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) ./files/usr/bin/proxy-mode $(1)/usr/bin/proxy-mode
+	$(INSTALL_BIN) $(SUITE_ROOT)/core/usr/bin/proxy-mode $(1)/usr/bin/proxy-mode
 
 	$(INSTALL_DIR) $(1)/etc/init.d
-	$(INSTALL_BIN) ./files/etc/init.d/sing-box $(1)/etc/init.d/sing-box
+	$(INSTALL_BIN) $(SUITE_ROOT)/core/etc/init.d/sing-box $(1)/etc/init.d/sing-box
 
 	$(INSTALL_DIR) $(1)/etc/config
-	$(INSTALL_CONF) ./files/etc/config/proxy-mode $(1)/etc/config/proxy-mode
-	$(INSTALL_CONF) ./files/etc/config/sing-box $(1)/etc/config/sing-box
+	$(INSTALL_CONF) $(SUITE_ROOT)/core/etc/config/proxy-mode $(1)/etc/config/proxy-mode
+	$(INSTALL_CONF) $(SUITE_ROOT)/core/etc/config/sing-box.example $(1)/etc/config/sing-box
 
 	$(INSTALL_DIR) $(1)/usr/libexec
-	$(INSTALL_BIN) ./files/usr/libexec/proxy-mode-export $(1)/usr/libexec/proxy-mode-export
-	$(INSTALL_BIN) ./files/usr/libexec/proxy-mode-import $(1)/usr/libexec/proxy-mode-import
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/export-config.sh $(1)/usr/libexec/proxy-mode-export
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/import-config.sh $(1)/usr/libexec/proxy-mode-import
 endef
 
 $(eval $(call BuildPackage,proxy-mode-core))
