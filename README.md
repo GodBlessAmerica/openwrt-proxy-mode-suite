@@ -2,7 +2,7 @@
 
 Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 leak protection, safe configuration validation, migration tooling, and reproducible OpenWrt package builds.
 
-> Status: **v1.0.0-rc1 packaging candidate**. Runtime and LuCI are split into standard OpenWrt packages; CI builds against a selected official OpenWrt SDK and can publish GitHub Releases.
+> Status: **v1.0.0 release candidate**. Both `proxy-mode-core` and `luci-app-proxy-mode` have been successfully built as APK packages with the official OpenWrt 25.12.5 `mediatek/filogic` SDK. Router installation and runtime smoke testing remain the final release gate.
 
 ## Ownership boundary
 
@@ -38,7 +38,7 @@ This separation avoids package-file conflicts and lets OpenWrt update sing-box n
 - Export/import tools for migration to a new OpenWrt installation.
 - Standard OpenWrt package definitions for `proxy-mode-core` and `luci-app-proxy-mode`.
 - GitHub Actions builds with selectable OpenWrt release, target and subtarget.
-- Automatic GitHub Release publishing for version tags or a manual `release_tag`.
+- Optional GitHub Release publishing with package files and `SHA256SUMS`.
 
 ## Repository layout
 
@@ -48,74 +48,95 @@ This separation avoids package-file conflicts and lets OpenWrt update sing-box n
 ├── VERSION
 ├── LICENSE
 ├── core/
-│   ├── etc/config/proxy-mode
-│   └── usr/bin/proxy-mode
 ├── luci-app-proxy-mode/
-│   ├── usr/libexec/proxy-mode-ui
-│   ├── usr/share/luci/menu.d/luci-app-proxy-mode.json
-│   ├── usr/share/rpcd/acl.d/luci-app-proxy-mode.json
-│   └── www/luci-static/resources/view/proxy-mode.js
 ├── package/
 │   ├── proxy-mode-core/Makefile
 │   └── luci-app-proxy-mode/Makefile
 ├── scripts/
+│   ├── prepare-sdk.sh
 │   ├── install.sh
 │   ├── uninstall.sh
 │   ├── export-config.sh
 │   └── import-config.sh
 ├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── INSTALL.md
-│   ├── MIGRATION.md
-│   ├── PACKAGING.md
-│   ├── SECURITY.md
-│   └── TROUBLESHOOTING.md
 └── .github/workflows/build-openwrt-packages.yml
 ```
 
 ## Security rule
 
-This repository should contain **software and templates only**. Do not commit real node credentials, UUIDs, passwords, private keys, subscription URLs, production `modeN.json` files, or SSH keys.
+This repository should contain **software and templates only**. Do not commit real node credentials, UUIDs, passwords, private keys, subscription URLs, production `modeN.json` files, SSH keys, or locally built APK/IPK binaries into the source tree.
 
-Base configurations live on the router under `/etc/sing-box/modeN.json`. Generated IPv6-block variants must not be edited directly.
+Release binaries belong in **GitHub Releases**, not in `main`.
 
-## Install from source
+## Install from release packages
 
-On a compatible OpenWrt system with the official sing-box package and LuCI already installed:
+The preferred distribution contains two files:
+
+- `proxy-mode-core-*.apk`
+- `luci-app-proxy-mode-*.apk`
+
+The target router must already have the official `sing-box` package. For the GUI it must also already have a working LuCI installation with `rpcd` and `uhttpd`.
+
+Copy the packages to the router, for example:
 
 ```sh
-chmod +x scripts/install.sh
-./scripts/install.sh
+scp proxy-mode-core-*.apk root@ROUTER_IP:/tmp/
+scp luci-app-proxy-mode-*.apk root@ROUTER_IP:/tmp/
 ```
 
-The source installer preserves the official sing-box init/UCI files. It sets `sing-box.main.user=root` because this project targets TUN-capable configurations. If a valid `/etc/sing-box/mode1.json` already exists, it may be selected as the initial mode; otherwise the installer does not start an empty proxy configuration.
+Then install core first and GUI second:
+
+```sh
+apk add /tmp/proxy-mode-core-*.apk
+apk add /tmp/luci-app-proxy-mode-*.apk
+```
+
+After installation:
+
+```sh
+/etc/init.d/rpcd restart
+/etc/init.d/uhttpd restart
+proxy-mode status
+```
+
+Open **LuCI → Services → Proxy Mode**.
+
+Before installing on an important existing router, back up `/etc/sing-box/` and `/etc/config/sing-box` or use the included export tool.
 
 See [`docs/INSTALL.md`](docs/INSTALL.md).
 
-## Install from packages
+## Build locally with the official SDK
 
-GitHub Actions builds two packages:
+Reference SDK:
 
-- `proxy-mode-core`
-- `luci-app-proxy-mode`
-
-On newer OpenWrt releases using APK:
-
-```sh
-apk add ./proxy-mode-core_*.apk
-apk add ./luci-app-proxy-mode_*.apk
+```text
+OpenWrt 25.12.5
+Target: mediatek
+Subtarget: filogic
+Toolchain: GCC 14.3.0 / musl
 ```
 
-On older OpenWrt releases using OPKG:
+Clone the repository next to your SDK and run:
 
 ```sh
-opkg install ./proxy-mode-core_*.ipk
-opkg install ./luci-app-proxy-mode_*.ipk
+cd openwrt-proxy-mode-suite
+git pull
+sh scripts/prepare-sdk.sh /path/to/sdk
+
+cd /path/to/sdk
+make package/proxy-mode-suite/proxy-mode-core/compile V=s -j1
+make package/proxy-mode-suite/luci-app-proxy-mode/compile V=s -j1
 ```
 
-The exact output format and filename are controlled by the selected OpenWrt SDK.
+Successful APKs are placed under a path similar to:
 
-## Build packages in GitHub Actions
+```text
+bin/packages/aarch64_cortex-a53/base/
+```
+
+The current package Makefiles intentionally avoid hard-selecting the full `sing-box` and LuCI dependency trees during SDK package-only builds. Those runtimes are checked on the target router instead.
+
+## GitHub Actions and Releases
 
 Open **Actions → Build OpenWrt packages → Run workflow**.
 
@@ -128,15 +149,13 @@ Subtarget: filogic
 Release tag: (empty)
 ```
 
-Leaving `release_tag` empty builds an Actions artifact only.
+Leave `release_tag` empty for a test artifact. After a build has been installed and smoke-tested on the reference router, publish a semantic release tag such as `v1.0.0` so users can download the packages from GitHub Releases.
 
-To publish a release, enter for example:
+Release assets should include both packages and `SHA256SUMS`. Verify them after download with:
 
-```text
-release_tag: v1.0.0
+```sh
+sha256sum -c SHA256SUMS
 ```
-
-The workflow builds both packages, generates `SHA256SUMS`, creates the GitHub Release if needed, and uploads the package files.
 
 See [`docs/PACKAGING.md`](docs/PACKAGING.md).
 
@@ -145,50 +164,58 @@ See [`docs/PACKAGING.md`](docs/PACKAGING.md).
 On the old router:
 
 ```sh
-scripts/export-config.sh
+/usr/libexec/proxy-mode-export
 ```
 
 On the new router, after installing the suite:
 
 ```sh
-scripts/import-config.sh /tmp/proxy-mode-backup-YYYYMMDD-HHMMSS.tar.gz
+/usr/libexec/proxy-mode-import /tmp/proxy-mode-backup-YYYYMMDD-HHMMSS.tar.gz
 ```
 
 See [`docs/MIGRATION.md`](docs/MIGRATION.md).
 
 ## Reference environment
 
-The project was generalized from a working installation using:
+Successfully package-built with:
 
 - OpenWrt 25.12.5
 - `mediatek/filogic`
 - `aarch64_cortex-a53`
 - apk-tools 3.x
-- LuCI 26.180
-- `rpcd-mod-file`
-- `uhttpd-mod-ubus`
-- sing-box managed by the official OpenWrt procd service
+- GCC 14.3.0 / musl
 
-The suite code itself is POSIX shell, UCI and LuCI JavaScript and is packaged as architecture independent. The sing-box package remains an architecture-specific external dependency supplied by the selected OpenWrt feed.
+Target runtime expects:
+
+- official OpenWrt `sing-box`
+- LuCI for the GUI package
+- `rpcd`
+- `uhttpd`
+- `uci`
+- `jsonfilter`
+- TUN/kernel support required by the selected sing-box mode
 
 ## Release checklist
 
-Before calling a build stable:
+Before calling the build stable:
 
-- `proxy-mode status` works.
-- Switching between known-good modes works.
-- IPv6 block/allow works and restores correctly.
-- LuCI opens without JS/RPC errors.
-- Invalid JSON is rejected.
-- Current mode cannot be deleted.
-- Export/import is tested on disposable data.
-- CI successfully produces package files.
-- No secrets are present in Git history.
+- [x] `proxy-mode-core` builds successfully as APK with the reference SDK.
+- [x] `luci-app-proxy-mode` builds successfully as APK with the reference SDK.
+- [ ] Both APKs install successfully on the reference router.
+- [ ] `proxy-mode status` works after package installation.
+- [ ] Switching at least two known-good modes succeeds.
+- [ ] IPv6 block/allow toggles and restores correctly.
+- [ ] LuCI opens without JavaScript or RPC errors.
+- [ ] Invalid JSON is rejected by `sing-box check`.
+- [ ] Current mode cannot be deleted.
+- [ ] Export/import is tested with a disposable backup.
+- [ ] Release contains package files plus `SHA256SUMS`.
+- [ ] No secrets are present in Git history or release assets.
 
 ## Remaining roadmap
 
-- [ ] Confirm first successful APK build on OpenWrt 25.12.5 / mediatek / filogic.
-- [ ] Test package installation on a disposable OpenWrt device/container.
+- [ ] Complete RAX3000M runtime smoke test.
+- [ ] Publish the first tested GitHub Release.
 - [ ] Test an older SDK to confirm IPK output.
 - [ ] Add richer graphical forms for Reality, WebSocket, gRPC, Hysteria2 obfs, TUIC and advanced TLS.
 - [ ] Add GUI-based export/import.
