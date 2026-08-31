@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
@@ -49,9 +49,17 @@ define Package/proxy-mode-core/postinst
 #!/bin/sh
 [ -n "$$IPKG_INSTROOT" ] && exit 0
 mkdir -p /etc/sing-box
-# Keep the official sing-box UCI service definition. Only add our own state option.
+# Reuse the official OpenWrt sing-box UCI service definition.
 uci -q get sing-box.main >/dev/null 2>&1 || uci set sing-box.main='sing-box'
+# Proxy Mode is designed around TUN-capable configurations, which require root.
+uci set sing-box.main.user='root'
 uci -q get sing-box.main.ipv6_mode >/dev/null 2>&1 || uci set sing-box.main.ipv6_mode='allow'
+# On a fresh install do not start an empty proxy. If a valid mode1 already exists,
+# make it the initial configuration and enable the service.
+if [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.json >/dev/null 2>&1; then
+	uci set sing-box.main.conffile='/etc/sing-box/mode1.json'
+	uci set sing-box.main.enabled='1'
+fi
 uci commit sing-box
 exit 0
 endef
