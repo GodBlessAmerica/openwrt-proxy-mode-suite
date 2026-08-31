@@ -1,0 +1,13 @@
+{
+  "admin/services/proxy-mode": {
+    "title": "Proxy Mode",
+    "order": 45,
+    "action": {
+      "type": "view",
+      "path": "proxy-mode"
+    },
+    "depends": {
+      "acl": [ "luci-app-proxy-mode" ]
+    }
+  }
+}
