@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=5
+PKG_RELEASE:=6
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
@@ -16,14 +16,16 @@ define Package/proxy-mode-core
   CATEGORY:=Network
   SUBMENU:=Web Servers/Proxies
   TITLE:=Dynamic sing-box mode manager for OpenWrt
-  DEPENDS:=+sing-box +jsonfilter +uci
+  DEPENDS:=+jsonfilter +uci
 endef
 
 define Package/proxy-mode-core/description
  Portable sing-box mode manager with dynamic modes, IPv6 leak protection,
  configuration validation, rollback-oriented behavior and migration helpers.
- This package intentionally relies on the official OpenWrt sing-box package
- for /usr/bin/sing-box, /etc/init.d/sing-box and /etc/config/sing-box.
+ The suite requires the official OpenWrt sing-box package at runtime, but does
+ not declare a hard Kconfig dependency on it because OpenWrt exposes sing-box
+ as full/tiny variants and provider resolution can create a recursive Kconfig
+ dependency in SDK package-only builds. Install the full sing-box package first.
 endef
 
 define Package/proxy-mode-core/conffiles
@@ -49,6 +51,10 @@ endef
 define Package/proxy-mode-core/postinst
 #!/bin/sh
 [ -n "$$IPKG_INSTROOT" ] && exit 0
+if ! command -v sing-box >/dev/null 2>&1; then
+	echo "proxy-mode-core: sing-box is required; install the official OpenWrt sing-box package first" >&2
+	exit 1
+fi
 mkdir -p /etc/sing-box
 # Reuse the official OpenWrt sing-box UCI service definition.
 uci -q get sing-box.main >/dev/null 2>&1 || uci set sing-box.main='sing-box'
