@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-proxy-mode
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=4
+PKG_RELEASE:=5
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
@@ -19,12 +19,16 @@ define Package/luci-app-proxy-mode
   CATEGORY:=LuCI
   SUBMENU:=3. Applications
   TITLE:=LuCI support for Proxy Mode Suite
-  DEPENDS:=+proxy-mode-core +luci-base
+  DEPENDS:=+proxy-mode-core
 endef
 
 define Package/luci-app-proxy-mode/description
  LuCI frontend for Proxy Mode Suite: status, dynamic mode management,
  IPv6 leak protection, service control and sing-box logs.
+ This package ships static LuCI assets and an RPC helper only. It intentionally
+ does not hard-select luci-base at build time so SDK package builds do not try to
+ rebuild the complete LuCI/lucihttp stack. Install it on an OpenWrt system that
+ already has LuCI, rpcd and uhttpd.
 endef
 
 define Build/Compile
@@ -47,6 +51,10 @@ endef
 define Package/luci-app-proxy-mode/postinst
 #!/bin/sh
 [ -n "$$IPKG_INSTROOT" ] && exit 0
+if [ ! -d /usr/share/luci ] || [ ! -x /etc/init.d/rpcd ] || [ ! -x /etc/init.d/uhttpd ]; then
+	echo "luci-app-proxy-mode: LuCI, rpcd and uhttpd must already be installed" >&2
+	exit 1
+fi
 rm -rf /tmp/luci-* /tmp/.uci 2>/dev/null || true
 /etc/init.d/rpcd restart 2>/dev/null || true
 /etc/init.d/uhttpd restart 2>/dev/null || true
