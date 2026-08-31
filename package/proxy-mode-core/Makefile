@@ -5,6 +5,7 @@ PKG_VERSION:=1.0.0
 PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
+PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -15,7 +16,6 @@ define Package/proxy-mode-core
   CATEGORY:=Network
   SUBMENU:=Web Servers/Proxies
   TITLE:=Dynamic sing-box mode manager for OpenWrt
-  PKGARCH:=all
   DEPENDS:=+sing-box +jsonfilter +uci
 endef
 
