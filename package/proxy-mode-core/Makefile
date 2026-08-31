@@ -2,17 +2,17 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=7
+PKG_RELEASE:=8
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
 
-# In SDK builds this Makefile is linked as
-# package/proxy-mode-suite/proxy-mode-core/Makefile. The suite source/data
-# links live one directory above it, under package/proxy-mode-suite/.
-SUITE_ROOT:=$(abspath $(CURDIR)/..)
+# OpenWrt follows the package symlink and runs make with CURDIR at the real
+# checkout path: <repo>/package/proxy-mode-core. Therefore the repository root
+# is two directories above CURDIR, not one.
+SUITE_ROOT:=$(abspath $(CURDIR)/../..)
 
 define Package/proxy-mode-core
   SECTION:=net
