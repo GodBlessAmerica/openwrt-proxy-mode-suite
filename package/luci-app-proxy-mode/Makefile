@@ -2,14 +2,14 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-proxy-mode
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
 
-SUITE_ROOT:=$(CURDIR)/..
+SUITE_ROOT:=$(abspath $(CURDIR)/../..)
 
 define Package/luci-app-proxy-mode
   SECTION:=luci
@@ -29,16 +29,16 @@ endef
 
 define Package/luci-app-proxy-mode/install
 	$(INSTALL_DIR) $(1)/usr/libexec
-	$(INSTALL_BIN) $(SUITE_ROOT)/luci-app-proxy-mode-src/usr/libexec/proxy-mode-ui $(1)/usr/libexec/proxy-mode-ui
+	$(INSTALL_BIN) $(SUITE_ROOT)/luci-app-proxy-mode/usr/libexec/proxy-mode-ui $(1)/usr/libexec/proxy-mode-ui
 
 	$(INSTALL_DIR) $(1)/usr/share/luci/menu.d
-	$(INSTALL_DATA) $(SUITE_ROOT)/luci-app-proxy-mode-src/usr/share/luci/menu.d/luci-app-proxy-mode.json $(1)/usr/share/luci/menu.d/luci-app-proxy-mode.json
+	$(INSTALL_DATA) $(SUITE_ROOT)/luci-app-proxy-mode/usr/share/luci/menu.d/luci-app-proxy-mode.json $(1)/usr/share/luci/menu.d/luci-app-proxy-mode.json
 
 	$(INSTALL_DIR) $(1)/usr/share/rpcd/acl.d
-	$(INSTALL_DATA) $(SUITE_ROOT)/luci-app-proxy-mode-src/usr/share/rpcd/acl.d/luci-app-proxy-mode.json $(1)/usr/share/rpcd/acl.d/luci-app-proxy-mode.json
+	$(INSTALL_DATA) $(SUITE_ROOT)/luci-app-proxy-mode/usr/share/rpcd/acl.d/luci-app-proxy-mode.json $(1)/usr/share/rpcd/acl.d/luci-app-proxy-mode.json
 
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view
-	$(INSTALL_DATA) $(SUITE_ROOT)/luci-app-proxy-mode-src/www/luci-static/resources/view/proxy-mode.js $(1)/www/luci-static/resources/view/proxy-mode.js
+	$(INSTALL_DATA) $(SUITE_ROOT)/luci-app-proxy-mode/www/luci-static/resources/view/proxy-mode.js $(1)/www/luci-static/resources/view/proxy-mode.js
 endef
 
 define Package/luci-app-proxy-mode/postinst
