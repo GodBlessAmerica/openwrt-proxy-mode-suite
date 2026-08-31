@@ -32,6 +32,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: openwrt-packages-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -94,8 +98,9 @@ jobs:
         run: |
           set -euo pipefail
           cd "$SDK_DIR"
-          make package/proxy-mode-suite/proxy-mode-core/compile V=s
-          make package/proxy-mode-suite/luci-app-proxy-mode/compile V=s
+          JOBS="$(nproc)"
+          make -j"$JOBS" package/proxy-mode-suite/proxy-mode-core/compile V=s
+          make -j"$JOBS" package/proxy-mode-suite/luci-app-proxy-mode/compile V=s
 
       - name: Collect packages
         shell: bash
