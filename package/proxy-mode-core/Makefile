@@ -8,7 +8,7 @@ PKG_MAINTAINER:=GodBlessAmerica
 
 include $(INCLUDE_DIR)/package.mk
 
-SUITE_ROOT:=$(CURDIR)/../..
+SUITE_ROOT:=$(CURDIR)/..
 
 define Package/proxy-mode-core
   SECTION:=net
