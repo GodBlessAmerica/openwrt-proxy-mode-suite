@@ -29,11 +29,16 @@ printf '%s\n' "Suite source:  $REPO_ROOT"
 
 cd "$SDK_DIR"
 
-# Make all feed package definitions available. Installing only luci-base or
-# sing-box is insufficient in an SDK because their transitive package symbols
-# may otherwise be absent from Kconfig.
-./scripts/feeds update -a
-./scripts/feeds install -a
+# Update only the feeds this project actually needs. Do NOT install every feed
+# package into the SDK: doing so imports unrelated package Kconfig and prereqs
+# (nginx modules, many U-Boot variants, etc.) and can create irrelevant recursive
+# dependency warnings or host-tool failures before our packages are even built.
+./scripts/feeds update packages luci
+
+# Install only the package definitions needed by Proxy Mode Suite and LuCI.
+# OpenWrt SDK already provides the base system package definitions. These calls
+# add the external feed packages we directly need without selecting the whole feed.
+./scripts/feeds install luci-base
 
 # Critical: never layer new symlinks over an old suite directory. Old package
 # Makefiles can survive and generate impossible Kconfig relationships such as
@@ -52,9 +57,7 @@ ln -s "$REPO_ROOT/scripts" "$SUITE_DIR/scripts"
 rm -rf tmp
 mkdir -p tmp
 
-# Do not select sing-box-tiny implicitly. Proxy Mode expects the normal/full
-# OpenWrt sing-box runtime to be installed on the router; the suite package does
-# not hard-select either provider in Kconfig.
+# Remove stale selections left by previous broad feed installs/build attempts.
 if [ -f .config ]; then
   sed -i \
     -e '/^CONFIG_PACKAGE_proxy-mode-core=/d' \
