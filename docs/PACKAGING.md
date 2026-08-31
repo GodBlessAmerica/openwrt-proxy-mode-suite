@@ -6,12 +6,57 @@ This project uses standard OpenWrt package Makefiles. The same source tree can p
 
 Two packages are built:
 
-- `proxy-mode-core` — runtime shell code, UCI defaults, procd service, export/import helpers.
+- `proxy-mode-core` — runtime shell code, UCI defaults, export/import helpers.
 - `luci-app-proxy-mode` — LuCI JavaScript view, RPC ACL and UI backend.
 
 `luci-app-proxy-mode` depends on `proxy-mode-core`.
 
-The sing-box binary is intentionally **not bundled**. The target OpenWrt feed should provide the architecture-specific `sing-box` package.
+The sing-box binary is intentionally **not bundled**. Install the official OpenWrt `sing-box` package on the target router first.
+
+The LuCI package also intentionally avoids hard-selecting the full LuCI dependency tree during an SDK package-only build. It expects the target router to already have LuCI, `rpcd` and `uhttpd`.
+
+## Verified reference build
+
+A successful local build has been completed using:
+
+```text
+OpenWrt: 25.12.5
+Target: mediatek
+Subtarget: filogic
+Architecture: aarch64_cortex-a53
+Toolchain: GCC 14.3.0 / musl
+Package format: APK
+```
+
+Verified outputs from that build were:
+
+```text
+proxy-mode-core-1.0.0-r8.apk
+luci-app-proxy-mode-1.0.0-r5.apk
+```
+
+Package revisions may increase in later commits, so users should treat those filenames as a reference, not as fixed permanent names.
+
+## Local SDK build
+
+Start with a clean official SDK and a repository checkout. Then run:
+
+```sh
+cd openwrt-proxy-mode-suite
+sh scripts/prepare-sdk.sh /path/to/sdk
+
+cd /path/to/sdk
+make package/proxy-mode-suite/proxy-mode-core/compile V=s -j1
+make package/proxy-mode-suite/luci-app-proxy-mode/compile V=s -j1
+```
+
+The helper intentionally avoids installing every feed package into the SDK. Installing an entire feed can import unrelated Kconfig/prerequisite trees such as nginx or U-Boot and cause failures unrelated to Proxy Mode Suite.
+
+For the reference APK SDK, successful output appears under a path similar to:
+
+```text
+bin/packages/aarch64_cortex-a53/base/
+```
 
 ## GitHub Actions
 
@@ -29,81 +74,99 @@ Target: mediatek
 Subtarget: filogic
 ```
 
-This matches the original RAX3000M reference installation.
+The workflow downloads the official SDK, prepares the package tree, compiles both suite packages, calculates SHA-256 hashes and collects the generated artifacts.
 
-The workflow can also be launched manually with another release/target/subtarget. It downloads the corresponding official OpenWrt SDK, installs the required feeds, compiles both packages, calculates SHA-256 hashes, and uploads the results as a workflow artifact.
+## Where binaries belong
 
-## Tagged releases
+Do **not** commit generated `.apk`, `.ipk` or `SHA256SUMS` files into the source tree on `main`.
 
-For a tagged build such as:
+Use:
+
+- source files and documentation in the Git repository;
+- temporary/test builds as GitHub Actions artifacts;
+- tested distributable binaries as GitHub Release assets.
+
+This keeps source history small and avoids stale binaries being mistaken for current builds.
+
+## Publishing a release
+
+After the generated packages pass installation and runtime smoke tests on the reference router, publish a semantic release such as:
 
 ```text
 v1.0.0
 ```
 
-the workflow is configured to create/update a GitHub Release and upload the generated package files plus `SHA256SUMS`.
-
-A release should contain files similar to:
+A release should contain:
 
 ```text
-proxy-mode-core_1.0.0-r1_all.apk
-luci-app-proxy-mode_1.0.0-r1_all.apk
+proxy-mode-core-<version>.apk
+luci-app-proxy-mode-<version>.apk
 SHA256SUMS
 ```
 
-or on an older SDK:
+or the equivalent `.ipk` files for an older OPKG-based OpenWrt SDK.
 
-```text
-proxy-mode-core_1.0.0-1_all.ipk
-luci-app-proxy-mode_1.0.0-1_all.ipk
-SHA256SUMS
+Verify downloaded release assets with:
+
+```sh
+sha256sum -c SHA256SUMS
 ```
-
-Exact package naming is controlled by the selected OpenWrt SDK.
 
 ## Installing release packages
 
-Newer OpenWrt / APK example:
+APK-based OpenWrt:
 
 ```sh
-apk add ./proxy-mode-core_*.apk
-apk add ./luci-app-proxy-mode_*.apk
+apk add ./proxy-mode-core-*.apk
+apk add ./luci-app-proxy-mode-*.apk
 ```
 
-Older OpenWrt / OPKG example:
+OPKG-based OpenWrt:
 
 ```sh
 opkg install ./proxy-mode-core_*.ipk
 opkg install ./luci-app-proxy-mode_*.ipk
 ```
 
-Install `sing-box` from the correct OpenWrt feed first if it is not already present.
+Install core first, then the GUI package.
 
-## Why packages are architecture independent
+## Why package-only builds avoid hard runtime dependency trees
 
-The suite's own runtime consists of POSIX shell, UCI configuration and LuCI JavaScript. The project packages therefore use `PKGARCH:=all`.
+OpenWrt's package metadata can expose provider/variant relationships and large transitive dependency trees that are useful for full firmware builds but problematic for tiny SDK package-only builds.
 
-`sing-box` itself is architecture dependent and remains an external dependency. This prevents one RAX3000M-specific binary from being accidentally installed on x86_64, armv7, mipsel or another target.
+This project therefore keeps two boundaries explicit:
 
-## Before publishing a release
+1. `proxy-mode-core` requires the official sing-box runtime on the target device, but does not hard-select the sing-box full/tiny provider variants during package build.
+2. `luci-app-proxy-mode` requires an existing LuCI/rpcd/uhttpd runtime on the target device, but does not force the SDK to rebuild the complete LuCI/lucihttp stack merely to package static JavaScript, ACL and shell helper files.
 
-Check the following:
+Runtime post-install checks protect against installing onto an unsuitable target.
 
-1. `proxy-mode status` works on the reference router.
-2. Switching at least two modes succeeds.
-3. IPv6 block/allow can be toggled and restored.
-4. LuCI opens without JavaScript or RPC errors.
-5. Editing an invalid mode is rejected by `sing-box check`.
-6. Current mode cannot be deleted.
-7. Export/import has been tested with a disposable backup.
-8. No real UUID, password, node hostname, subscription URL or private key is present in Git history.
+## Architecture note
+
+The package output may be emitted inside an architecture-specific SDK output directory even though the suite is implemented in shell/config/JavaScript and declares `PKGARCH:=all`. The exact package metadata and output naming are controlled by the selected OpenWrt SDK/package manager.
+
+`sing-box` remains an external architecture-specific package supplied by OpenWrt.
+
+## Before publishing a stable release
+
+1. Both packages build successfully with the intended SDK.
+2. Both packages install successfully on the reference router.
+3. `proxy-mode status` works.
+4. Switching at least two known-good modes succeeds.
+5. IPv6 block/allow can be toggled and restored.
+6. LuCI opens without JavaScript or RPC errors.
+7. Editing an invalid mode is rejected by `sing-box check`.
+8. Current mode cannot be deleted.
+9. Export/import is tested with a disposable backup.
+10. Release includes `SHA256SUMS`.
+11. No credentials, UUIDs, private keys, node URLs or production mode files are present in source history or release assets.
 
 ## Version policy
 
 Recommended scheme:
 
 - `0.x` — experimental GUI/runtime iterations.
-- `1.0.0` — first reproducible package release.
+- `1.0.0` — first reproducible and router-tested package release.
 - Patch release — bug fixes that do not change backup/config format.
 - Minor release — new UI/protocol/template functionality with backward-compatible configs.
 - Major release — incompatible runtime or migration-format changes.
