@@ -1,0 +1,18 @@
+#!/bin/sh
+
+[ "$ACTION" = "ifup" ] || exit 0
+[ -n "${INTERFACE:-}" ] || exit 0
+
+IFACES="$(uci -q get sing-box.main.ifaces 2>/dev/null || true)"
+for iface in $IFACES; do
+    [ "$iface" = "$INTERFACE" ] || continue
+    logger -t proxy-mode "upstream $INTERFACE is up; scheduling proxy recovery"
+    (
+        sleep 3
+        /usr/bin/proxy-mode recover >/tmp/proxy-mode-recover.log 2>&1 || \
+            logger -t proxy-mode "recovery failed; see /tmp/proxy-mode-recover.log"
+    ) &
+    exit 0
+done
+
+exit 0
