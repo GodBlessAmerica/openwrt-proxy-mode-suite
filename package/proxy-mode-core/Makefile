@@ -2,14 +2,17 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=6
+PKG_RELEASE:=7
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
 
-SUITE_ROOT:=$(abspath $(CURDIR)/../..)
+# In SDK builds this Makefile is linked as
+# package/proxy-mode-suite/proxy-mode-core/Makefile. The suite source/data
+# links live one directory above it, under package/proxy-mode-suite/.
+SUITE_ROOT:=$(abspath $(CURDIR)/..)
 
 define Package/proxy-mode-core
   SECTION:=net
@@ -56,13 +59,9 @@ if ! command -v sing-box >/dev/null 2>&1; then
 	exit 1
 fi
 mkdir -p /etc/sing-box
-# Reuse the official OpenWrt sing-box UCI service definition.
 uci -q get sing-box.main >/dev/null 2>&1 || uci set sing-box.main='sing-box'
-# Proxy Mode is designed around TUN-capable configurations, which require root.
 uci set sing-box.main.user='root'
 uci -q get sing-box.main.ipv6_mode >/dev/null 2>&1 || uci set sing-box.main.ipv6_mode='allow'
-# On a fresh install do not start an empty proxy. If a valid mode1 already exists,
-# make it the initial configuration and enable the service.
 if [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.json >/dev/null 2>&1; then
 	uci set sing-box.main.conffile='/etc/sing-box/mode1.json'
 	uci set sing-box.main.enabled='1'
