@@ -2,40 +2,53 @@
 
 ## Supported design
 
-This project targets standard OpenWrt systems with LuCI and sing-box. The reference system is OpenWrt 25.12.5 with apk-tools, but the suite itself is architecture independent because it does not bundle a sing-box binary.
+This project targets standard OpenWrt systems with sing-box and, for the graphical interface, LuCI. The reference build environment is OpenWrt 25.12.5 with apk-tools. The suite itself does not bundle the sing-box binary.
 
 ## Prerequisites
 
-Before installing the suite, the router should have:
+Before installing `proxy-mode-core`, the router should have:
 
 - OpenWrt
-- LuCI
-- sing-box installed as `/usr/bin/sing-box`
+- official `sing-box` installed as `/usr/bin/sing-box`
 - `uci`
 - `jsonfilter`
-- `rpcd`
-- `uhttpd`
 - TUN/kernel support required by your sing-box configuration
 
-For the GUI, modern builds should also provide:
+Before installing `luci-app-proxy-mode`, the router should additionally already have:
 
-- `rpcd-mod-file`
-- `uhttpd-mod-ubus`
+- LuCI
+- `rpcd`
+- `uhttpd`
 
-The formal LuCI package declares these dependencies.
+Modern LuCI installations normally provide the RPC/uhttpd integration they require. The GUI package intentionally does not hard-select the complete LuCI dependency tree during SDK package-only builds; its post-install check verifies the runtime is present on the router.
 
-## Preferred installation: release packages
+## Preferred installation: GitHub Release packages
 
-Download the package files built for the same OpenWrt release/target family from GitHub Actions or a GitHub Release.
+Do not commit locally built APK/IPK binaries into the source branch. Release binaries should be distributed through **GitHub Releases** together with `SHA256SUMS`.
+
+Download packages built for a compatible OpenWrt release/target family.
 
 ### APK-based OpenWrt
 
+Copy both packages to the router:
+
 ```sh
-apk add ./proxy-mode-core_*.apk
-apk add ./luci-app-proxy-mode_*.apk
+scp proxy-mode-core-*.apk root@ROUTER_IP:/tmp/
+scp luci-app-proxy-mode-*.apk root@ROUTER_IP:/tmp/
 ```
 
-If `sing-box` is not installed yet, install it from the matching OpenWrt repository first.
+Verify the files if `SHA256SUMS` is supplied:
+
+```sh
+sha256sum -c SHA256SUMS
+```
+
+Install core first, then GUI:
+
+```sh
+apk add /tmp/proxy-mode-core-*.apk
+apk add /tmp/luci-app-proxy-mode-*.apk
+```
 
 ### OPKG-based OpenWrt
 
@@ -46,25 +59,68 @@ opkg install ./luci-app-proxy-mode_*.ipk
 
 Do not assume a package produced by one OpenWrt release SDK is appropriate for an unrelated OpenWrt release.
 
-## Source installation
+## Existing router: back up first
 
-For development, recovery or before a release package exists, copy/clone the repository to the router and run:
+If the router already runs sing-box modes, preserve the existing working configuration before the first package installation.
 
-```sh
-cd openwrt-proxy-mode-suite
-chmod +x scripts/*.sh core/usr/bin/proxy-mode core/etc/init.d/sing-box luci-app-proxy-mode/usr/libexec/proxy-mode-ui
-./scripts/install.sh
-```
-
-The source installer backs up existing files to:
+At minimum back up:
 
 ```text
-/root/proxy-mode-suite-backup-YYYYMMDD-HHMMSS/
+/etc/config/sing-box
+/etc/sing-box/
 ```
 
-before replacing them.
+If Proxy Mode Suite is already installed from source, use:
 
-After either installation method, open:
+```sh
+/usr/libexec/proxy-mode-export
+```
+
+or from a repository checkout:
+
+```sh
+scripts/export-config.sh
+```
+
+The package does not ship production `modeN.json` files and does not intentionally replace existing mode files.
+
+## Verify prerequisites before installation
+
+Useful checks:
+
+```sh
+command -v sing-box
+sing-box version
+command -v uci
+command -v jsonfilter
+```
+
+For the GUI:
+
+```sh
+[ -d /usr/share/luci ] && echo LuCI-present
+[ -x /etc/init.d/rpcd ] && echo rpcd-present
+[ -x /etc/init.d/uhttpd ] && echo uhttpd-present
+```
+
+## Verify after installation
+
+Run:
+
+```sh
+proxy-mode status
+proxy-mode ipv6 status
+```
+
+Restart RPC/web services if needed:
+
+```sh
+rm -rf /tmp/luci-* /tmp/.uci 2>/dev/null
+/etc/init.d/rpcd restart
+/etc/init.d/uhttpd restart
+```
+
+Then open:
 
 **LuCI → Services → Proxy Mode**
 
@@ -72,7 +128,7 @@ After either installation method, open:
 
 The suite intentionally does not ship a real production `mode1.json`, because mode files normally contain private node information.
 
-Create `/etc/sing-box/mode1.json` from your own known-good sing-box configuration, then validate it:
+Create `/etc/sing-box/mode1.json` from your own known-good sing-box configuration and validate it:
 
 ```sh
 sing-box check -c /etc/sing-box/mode1.json
@@ -88,49 +144,39 @@ proxy-mode 1
 
 Once one working mode exists, the LuCI Mode Manager can clone it to create additional modes or accept complete Custom JSON.
 
-## Existing router upgrade
+## Source installation
 
-If the router already has `/etc/sing-box/modeN.json` files, the source installer leaves those files untouched. Package upgrades treat `/etc/config/proxy-mode` and `/etc/config/sing-box` as configuration files.
-
-Before the first package-based upgrade of an important router, create a migration backup:
+For development or recovery, clone/copy the repository to the router and use the source installer:
 
 ```sh
-/usr/libexec/proxy-mode-export
+cd openwrt-proxy-mode-suite
+chmod +x scripts/*.sh core/usr/bin/proxy-mode luci-app-proxy-mode/usr/libexec/proxy-mode-ui
+./scripts/install.sh
 ```
 
-or, from a repository checkout:
+The source installer creates a timestamped backup before replacing suite-owned files.
+
+## Building locally with the official SDK
+
+Prepare a clean SDK with:
 
 ```sh
-scripts/export-config.sh
+cd openwrt-proxy-mode-suite
+sh scripts/prepare-sdk.sh /path/to/sdk
 ```
 
-## Verify after installation
-
-Run:
+Then build:
 
 ```sh
-proxy-mode status
-proxy-mode ipv6 status
+cd /path/to/sdk
+make package/proxy-mode-suite/proxy-mode-core/compile V=s -j1
+make package/proxy-mode-suite/luci-app-proxy-mode/compile V=s -j1
 ```
 
-Then confirm LuCI opens and shows your mode list.
+For the verified OpenWrt 25.12.5 mediatek/filogic SDK, the APK files are emitted under a path similar to:
 
-If the page does not appear immediately, restart the web/RPC services or clear the LuCI cache:
-
-```sh
-rm -rf /tmp/luci-* /tmp/.uci 2>/dev/null
-/etc/init.d/rpcd restart
-/etc/init.d/uhttpd restart
+```text
+bin/packages/aarch64_cortex-a53/base/
 ```
 
-## Building for another OpenWrt target
-
-Use **Actions → Build OpenWrt packages → Run workflow** and specify:
-
-- OpenWrt version
-- target
-- subtarget
-
-Leave `release_tag` blank for an artifact-only test build. Supply a semantic tag such as `v1.0.0` only when you intend to publish a GitHub Release.
-
-See [`PACKAGING.md`](PACKAGING.md) for details.
+See [`PACKAGING.md`](PACKAGING.md) for release and CI details.
