@@ -1,0 +1,97 @@
+name: Release OpenWrt packages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/release-trigger'
+      - '.github/workflows/release-openwrt-packages.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="$(tr -d '[:space:]' < .github/release-trigger)"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $TAG" >&2
+            exit 1
+          fi
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync swig unzip zlib1g-dev file wget curl zstd
+
+      - name: Download OpenWrt 25.12.5 mediatek filogic SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://downloads.openwrt.org/releases/25.12.5/targets/mediatek/filogic"
+          HTML="$(curl -fsSL "$BASE/")"
+          SDK_FILE="$(printf '%s' "$HTML" | grep -oE 'openwrt-sdk-[^"<> ]+\.tar\.(zst|xz)' | head -n1)"
+          test -n "$SDK_FILE"
+          curl -fL "$BASE/$SDK_FILE" -o "$RUNNER_TEMP/$SDK_FILE"
+          mkdir -p "$RUNNER_TEMP/openwrt-sdk"
+          tar -xf "$RUNNER_TEMP/$SDK_FILE" -C "$RUNNER_TEMP/openwrt-sdk" --strip-components=1
+          echo "SDK_DIR=$RUNNER_TEMP/openwrt-sdk" >> "$GITHUB_ENV"
+
+      - name: Prepare SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/prepare-sdk.sh
+          scripts/prepare-sdk.sh "$SDK_DIR"
+
+      - name: Build packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$SDK_DIR"
+          make package/proxy-mode-suite/proxy-mode-core/compile V=s -j1
+          make package/proxy-mode-suite/luci-app-proxy-mode/compile V=s -j1
+
+      - name: Collect packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find "$SDK_DIR/bin" -type f \( \
+            -name 'proxy-mode-core-*.apk' -o -name 'proxy-mode-core_*.apk' -o \
+            -name 'luci-app-proxy-mode-*.apk' -o -name 'luci-app-proxy-mode_*.apk' \
+          \) -exec cp -v {} dist/ \;
+          test -n "$(find dist -type f -name '*.apk' -print -quit)"
+          (cd dist && sha256sum *.apk > SHA256SUMS)
+          ls -lah dist
+
+      - name: Upload Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxy-mode-25.12.5-mediatek-filogic
+          path: dist/
+          if-no-files-found: error
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES="OpenWrt Proxy Mode Suite ${RELEASE_TAG}\n\nTarget: OpenWrt 25.12.5, mediatek/filogic.\n\nIncludes proxy-mode-core runtime recovery/safety improvements and the LuCI frontend. See docs/INSTALL.md and docs/MIGRATION.md before installation."
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "$RELEASE_TAG" --notes "$NOTES" --prerelease dist/*
+          fi
