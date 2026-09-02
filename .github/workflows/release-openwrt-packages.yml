@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - '.github/release-trigger'
-      - '.github/workflows/release-openwrt-packages.yml'
 
 permissions:
   contents: write
@@ -19,16 +18,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Read release tag
+      - name: Validate release version
         shell: bash
         run: |
           set -euo pipefail
           TAG="$(tr -d '[:space:]' < .github/release-trigger)"
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release tag: $TAG" >&2
             exit 1
           fi
+
+          if [[ "$TAG" != "v$VERSION" ]]; then
+            echo "Release tag/version mismatch: trigger=$TAG VERSION=$VERSION" >&2
+            exit 1
+          fi
+
+          CORE_VERSION="$(sed -n 's/^PKG_VERSION:=//p' package/proxy-mode-core/Makefile | head -n1)"
+          CORE_RELEASE="$(sed -n 's/^PKG_RELEASE:=//p' package/proxy-mode-core/Makefile | head -n1)"
+          LUCI_VERSION="$(sed -n 's/^PKG_VERSION:=//p' package/luci-app-proxy-mode/Makefile | head -n1)"
+          LUCI_RELEASE="$(sed -n 's/^PKG_RELEASE:=//p' package/luci-app-proxy-mode/Makefile | head -n1)"
+
+          test -n "$CORE_VERSION"
+          test -n "$CORE_RELEASE"
+          test -n "$LUCI_VERSION"
+          test -n "$LUCI_RELEASE"
+
           echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "SUITE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "CORE_PACKAGE=proxy-mode-core-${CORE_VERSION}-r${CORE_RELEASE}.apk" >> "$GITHUB_ENV"
+          echo "LUCI_PACKAGE=luci-app-proxy-mode-${LUCI_VERSION}-r${LUCI_RELEASE}.apk" >> "$GITHUB_ENV"
 
       - name: Install host dependencies
         run: |
@@ -72,14 +92,22 @@ jobs:
             -name 'proxy-mode-core-*.apk' -o -name 'proxy-mode-core_*.apk' -o \
             -name 'luci-app-proxy-mode-*.apk' -o -name 'luci-app-proxy-mode_*.apk' \
           \) -exec cp -v {} dist/ \;
-          test -n "$(find dist -type f -name '*.apk' -print -quit)"
-          (cd dist && sha256sum *.apk > SHA256SUMS)
+
+          test -f "dist/$CORE_PACKAGE"
+          test -f "dist/$LUCI_PACKAGE"
+
+          # Keep only the exact package revisions declared by this source tree.
+          find dist -type f -name 'proxy-mode-core-*.apk' ! -name "$CORE_PACKAGE" -delete
+          find dist -type f -name 'luci-app-proxy-mode-*.apk' ! -name "$LUCI_PACKAGE" -delete
+
+          (cd dist && sha256sum "$CORE_PACKAGE" "$LUCI_PACKAGE" > SHA256SUMS)
+          sha256sum -c dist/SHA256SUMS --ignore-missing
           ls -lah dist
 
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: proxy-mode-25.12.5-mediatek-filogic
+          name: proxy-mode-25.12.5-mediatek-filogic-${{ env.RELEASE_TAG }}
           path: dist/
           if-no-files-found: error
 
@@ -89,9 +117,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          NOTES="OpenWrt Proxy Mode Suite ${RELEASE_TAG}\n\nTarget: OpenWrt 25.12.5, mediatek/filogic.\n\nrc2 highlights:\n- refreshed LuCI status dashboard\n- proxy-mode-core r11 preserves the actually running valid sing-box configuration during reinstall\n- luci-app-proxy-mode r6 includes the updated dashboard\n- fresh routers remain unconfigured when no valid mode exists\n- expanded INSTALL and USAGE documentation\n\nSee README.md, docs/INSTALL.md, docs/USAGE.md and docs/MIGRATION.md."
+
+          NOTES=$(cat <<EOF
+          OpenWrt Proxy Mode Suite ${RELEASE_TAG}
+
+          Target: OpenWrt 25.12.5, mediatek/filogic.
+
+          Packages:
+          - ${CORE_PACKAGE}
+          - ${LUCI_PACKAGE}
+          - SHA256SUMS
+
+          Highlights include safe sing-box mode management, IPv6 leak protection, upstream recovery and the LuCI dashboard.
+
+          Documentation:
+          - README.md
+          - docs/INSTALL.md
+          - docs/USAGE.md
+          - docs/MIGRATION.md
+          EOF
+          )
+
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" dist/* --clobber
+            gh release upload "$RELEASE_TAG" "dist/$CORE_PACKAGE" "dist/$LUCI_PACKAGE" dist/SHA256SUMS --clobber
           else
-            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "$RELEASE_TAG" --notes "$NOTES" --prerelease dist/*
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "$RELEASE_TAG" --notes "$NOTES" --prerelease "dist/$CORE_PACKAGE" "dist/$LUCI_PACKAGE" dist/SHA256SUMS
           fi
