@@ -4,6 +4,56 @@ Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 
 
 > Current version: **v1.0.0-rc3**. Reference validation: OpenWrt 25.12.5 on `mediatek/filogic` with a CMCC RAX3000M and sing-box 1.13.18.
 
+## Quick Start
+
+Install the official OpenWrt sing-box package first:
+
+```sh
+apk update
+apk add sing-box
+```
+
+Download the current rc3 Release packages:
+
+```sh
+cd /tmp
+wget -O proxy-mode-core-1.0.0-r13.apk \
+  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/proxy-mode-core-1.0.0-r13.apk
+wget -O luci-app-proxy-mode-1.0.0-r7.apk \
+  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/luci-app-proxy-mode-1.0.0-r7.apk
+wget -O SHA256SUMS \
+  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/SHA256SUMS
+sha256sum -c SHA256SUMS
+```
+
+Install the verified packages:
+
+```sh
+apk add --allow-untrusted /tmp/proxy-mode-core-1.0.0-r13.apk
+apk add --allow-untrusted /tmp/luci-app-proxy-mode-1.0.0-r7.apk
+```
+
+`--allow-untrusted` is required because the Release APKs are not signed by an OpenWrt repository key. Only use it for packages downloaded from this project's Release page and verified with `SHA256SUMS`.
+
+Verify:
+
+```sh
+proxy-mode status
+```
+
+Then open:
+
+**LuCI → Services → Proxy Mode**
+
+On a fresh router, click **Add Mode**, enter a Mode Number such as `6`, choose **Custom JSON**, paste a complete known-good sing-box configuration, create it, then switch to it.
+
+CLI example:
+
+```sh
+sing-box check -c /etc/sing-box/mode6.json
+proxy-mode 6
+```
+
 ## Highlights
 
 - Manage numeric sing-box modes such as `mode1.json`, `mode6.json`, ...
@@ -47,7 +97,7 @@ Proxy Mode Suite owns:
 LuCI menu / ACL / JavaScript view
 ```
 
-The official init script remains intact, but Proxy Mode disables unconditional `rc.d` autostart so sing-box does not race ahead of WWAN/DHCP/default-route readiness. Proxy Mode starts/restarts it only after the configured upstream is ready.
+The official init script remains intact, but Proxy Mode disables unconditional `rc.d` autostart so sing-box does not race ahead of WWAN/DHCP/default-route readiness. Proxy Mode starts/restarts it only after the required upstream is ready.
 
 ## rc3 changes
 
@@ -69,38 +119,21 @@ proxy-mode-core-1.0.0-r13.apk
 luci-app-proxy-mode-1.0.0-r7.apk
 ```
 
-## Install
-
-Install the official sing-box package first:
-
-```sh
-apk update
-apk add sing-box
-```
-
-Then install the two Proxy Mode APKs from the GitHub Release:
-
-```sh
-apk add /tmp/proxy-mode-core-*.apk
-apk add /tmp/luci-app-proxy-mode-*.apk
-```
-
-Verify:
-
-```sh
-proxy-mode status
-proxy-mode health
-```
-
-Open:
-
-**LuCI → Services → Proxy Mode**
-
-Detailed instructions: [`docs/INSTALL.md`](docs/INSTALL.md)
-
-## First mode on a fresh router
+## Fresh-router behavior
 
 The repository intentionally contains no production `modeN.json` files because they commonly contain private server addresses and credentials.
+
+After installation on a fresh router with no managed modes, expected status is:
+
+```text
+当前模式：未配置
+配置文件：未设置
+运行状态：已停止
+```
+
+The official default `/etc/sing-box/config.json` is not treated as a Proxy Mode mode.
+
+## First mode on a fresh router
 
 In LuCI:
 
@@ -108,27 +141,29 @@ In LuCI:
 2. Click **Add Mode**.
 3. Enter the numeric Mode ID, for example `6`.
 4. Choose **Custom JSON**.
-5. Paste a complete known-good sing-box configuration.
-6. Create the mode.
-7. Switch/start it after validation.
+5. Enter a name such as `Mode 6`.
+6. Paste a complete known-good sing-box configuration.
+7. Create the mode.
+8. Switch/start it after validation.
 
-CLI example:
+A Mode Number of `6` creates `/etc/sing-box/mode6.json`.
 
-```sh
-sing-box check -c /etc/sing-box/mode6.json
-proxy-mode 6
-```
+## Optional upstream-interface pinning
 
-## WWAN recovery
+Normal switching and proxy operation only require a usable IPv4 default route. Setting `sing-box.main.ifaces` is **not required for basic proxy use**.
 
-For a Wi-Fi STA uplink such as `wwan`, configure:
+For routers using a known WAN/WWAN interface, pinning it is recommended because it makes boot and reconnect recovery more precise. Example for a Wi-Fi STA uplink named `wwan`:
 
 ```sh
 uci set sing-box.main.ifaces='wwan'
 uci commit sing-box
 ```
 
-At boot, sing-box is not allowed to start unconditionally before the upstream is ready. When `wwan` comes up, `/etc/hotplug.d/iface/99-proxy-mode` schedules a serialized recovery; the wrapper waits for interface readiness and an IPv4 default route before restarting the selected mode.
+With this setting, Proxy Mode waits for that interface plus an IPv4 default route before recovery. Without it, recovery falls back to default-route readiness.
+
+## WWAN recovery
+
+At boot, sing-box is not allowed to start unconditionally before the upstream is ready. When the configured upstream comes up, `/etc/hotplug.d/iface/99-proxy-mode` schedules serialized recovery.
 
 Useful diagnostics:
 
@@ -142,6 +177,26 @@ logread | grep -Ei 'proxy-mode|sing-box|wwan' | tail -100
 ```
 
 If multiple STA profiles are assigned to the same radio/interface, test carefully. On the reference RAX3000M, multiple enabled 5 GHz STA profiles on the same `wwan` caused availability problems.
+
+## IPv6 leak protection
+
+Block IPv6:
+
+```sh
+proxy-mode ipv6 block
+```
+
+Allow IPv6 again:
+
+```sh
+proxy-mode ipv6 allow
+```
+
+Check status with:
+
+```sh
+proxy-mode status
+```
 
 ## Source installation
 
@@ -158,6 +213,8 @@ mv openwrt-proxy-mode-suite-main openwrt-proxy-mode-suite
 cd openwrt-proxy-mode-suite
 sh scripts/install.sh
 ```
+
+For normal users, the tested Release APKs are preferred over `main` source installation.
 
 ## Common commands
 
