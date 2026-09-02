@@ -27,10 +27,10 @@ jobs:
           gh release delete-asset "$TAG" luci-app-proxy-mode-1.0.0-r6.apk --repo "$REPO" -y || true
           gh release delete-asset "$TAG" proxy-mode-core-1.0.0-r11.apk --repo "$REPO" -y || true
 
-          cat > /tmp/SHA256SUMS <<'EOF'
-4a31162e7902d16d7ab5205634f638aaabef334d09ceb101992318812905f8e5  luci-app-proxy-mode-1.0.0-r5.apk
-9a58c60bf9ba353a9e0a1aea41226d6cb7d14c3ef4acfe29120888ab48e9a301  proxy-mode-core-1.0.0-r10.apk
-EOF
+          printf '%s\n' \
+            '4a31162e7902d16d7ab5205634f638aaabef334d09ceb101992318812905f8e5  luci-app-proxy-mode-1.0.0-r5.apk' \
+            '9a58c60bf9ba353a9e0a1aea41226d6cb7d14c3ef4acfe29120888ab48e9a301  proxy-mode-core-1.0.0-r10.apk' \
+            > /tmp/SHA256SUMS
 
           gh release upload "$TAG" /tmp/SHA256SUMS --repo "$REPO" --clobber
 
