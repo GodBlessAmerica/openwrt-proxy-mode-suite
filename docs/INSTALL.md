@@ -21,6 +21,29 @@ apk add sing-box
 
 The GUI additionally requires LuCI, `rpcd` and `uhttpd`.
 
+## Optional: change the LAN subnet
+
+Proxy Mode does not require a specific LAN address. Change it only if you want a different local subnet or need to avoid a conflict with the upstream network.
+
+Example: change the LAN address to `10.88.0.1/24`:
+
+```sh
+uci set network.lan.ipaddr='10.88.0.1'
+uci set network.lan.netmask='255.255.255.0'
+uci commit network
+/etc/init.d/network restart
+```
+
+The current SSH/LuCI session will normally disconnect after the network restart. Reconnect using the new address, for example:
+
+```sh
+ssh root@10.88.0.1
+```
+
+Choose a LAN subnet that does not overlap the upstream network. For example, if the uplink is `192.168.71.0/24`, `10.88.0.0/24` is a non-overlapping example.
+
+You can also change the LAN address from LuCI under **Network → Interfaces → LAN**.
+
 ## Preferred installation: GitHub Release APKs
 
 For rc3, install:
