@@ -36,15 +36,26 @@ save_mode() {
 }
 
 next_id() { id=1; while [ "$id" -le 999 ]; do [ ! -e "$(base_file "$id")" ] && { echo "$id"; return 0; }; id=$((id + 1)); done; return 1; }
+ensure_free_id() { id="$1"; valid_id "$id" || { echo "ERROR: invalid mode id (1..999)" >&2; exit 2; }; [ ! -e "$(base_file "$id")" ] || { echo "ERROR: mode $id already exists" >&2; exit 3; }; }
 
 create_mode() { source="$1"; name="$2"; valid_id "$source" || { echo "ERROR: invalid source mode" >&2; exit 2; }; src="$(base_file "$source")"; [ -f "$src" ] || { echo "ERROR: source mode $source not found" >&2; exit 3; }; id="$(next_id)" || { echo "ERROR: no free mode id" >&2; exit 4; }; cp -p "$src" "$(base_file "$id")" || exit 5; chmod 600 "$(base_file "$id")"; set_name "$id" "$name" || { rm -f "$(base_file "$id")"; exit 6; }; echo "$id"; }
+create_mode_id() { id="$1"; source="$2"; name="$3"; ensure_free_id "$id"; valid_id "$source" || { echo "ERROR: invalid source mode" >&2; exit 4; }; src="$(base_file "$source")"; [ -f "$src" ] || { echo "ERROR: source mode $source not found" >&2; exit 5; }; cp -p "$src" "$(base_file "$id")" || exit 6; chmod 600 "$(base_file "$id")"; set_name "$id" "$name" || { rm -f "$(base_file "$id")"; exit 7; }; echo "$id"; }
 
-create_json_mode() { name="$1"; content="$2"; id="$(next_id)" || { echo "ERROR: no free mode id" >&2; exit 4; }; f="$(base_file "$id")"; tmp="$DIR/.mode${id}.new.$$"; printf '%s' "$content" > "$tmp" || exit 5; chmod 600 "$tmp"; if ! sing-box check -c "$tmp"; then echo "ERROR: sing-box check failed; mode was not created." >&2; rm -f "$tmp"; exit 6; fi; mv "$tmp" "$f" || exit 7; set_name "$id" "$name" || { rm -f "$f"; exit 8; }; echo "$id"; }
+create_json_mode() { name="$1"; content="$2"; id="$(next_id)" || { echo "ERROR: no free mode id" >&2; exit 4; }; create_json_mode_id "$id" "$name" "$content"; }
+create_json_mode_id() { id="$1"; name="$2"; content="$3"; ensure_free_id "$id"; f="$(base_file "$id")"; tmp="$DIR/.mode${id}.new.$$"; printf '%s' "$content" > "$tmp" || exit 5; chmod 600 "$tmp"; if ! sing-box check -c "$tmp"; then echo "ERROR: sing-box check failed; mode was not created." >&2; rm -f "$tmp"; exit 6; fi; mv "$tmp" "$f" || exit 7; set_name "$id" "$name" || { rm -f "$f"; exit 8; }; echo "$id"; }
 
 delete_mode() { id="$1"; valid_id "$id" || { echo "ERROR: invalid mode id" >&2; exit 2; }; [ -f "$(base_file "$id")" ] || { echo "ERROR: mode $id not found" >&2; exit 3; }; [ "$(current_id)" != "$id" ] || { echo "ERROR: current mode cannot be deleted. Switch to another mode first." >&2; exit 4; }; backup_dir="/root/proxy-mode-deleted"; mkdir -p "$backup_dir"; ts="$(date +%Y%m%d-%H%M%S)"; mv "$(base_file "$id")" "$backup_dir/mode${id}.json.$ts" || exit 5; [ ! -f "$(block_file "$id")" ] || mv "$(block_file "$id")" "$backup_dir/mode${id}-ipv6-block.json.$ts"; uci -q delete "${REGISTRY}.mode${id}"; uci commit "$REGISTRY"; echo "Mode $id deleted. Backup saved under $backup_dir."; }
 rename_mode() { id="$1"; name="$2"; valid_id "$id" || { echo "ERROR: invalid mode id" >&2; exit 2; }; [ -f "$(base_file "$id")" ] || { echo "ERROR: mode $id not found" >&2; exit 3; }; set_name "$id" "$name" || exit 4; echo "Mode $id renamed to: $(name_for "$id")"; }
 
 case "${1:-}" in
-    list) list_modes ;; read) read_mode "${2:-}" ;; save) save_mode "${2:-}" "${3:-}" ;; create) create_mode "${2:-}" "${3:-New Mode}" ;; create-json) create_json_mode "${2:-New Mode}" "${3:-}" ;; delete) delete_mode "${2:-}" ;; rename) rename_mode "${2:-}" "${3:-}" ;;
-    *) echo "usage: proxy-mode-ui list|read ID|save ID JSON|create SOURCE NAME|create-json NAME JSON|delete ID|rename ID NAME" >&2; exit 1 ;;
+    list) list_modes ;;
+    read) read_mode "${2:-}" ;;
+    save) save_mode "${2:-}" "${3:-}" ;;
+    create) create_mode "${2:-}" "${3:-New Mode}" ;;
+    create-id) create_mode_id "${2:-}" "${3:-}" "${4:-New Mode}" ;;
+    create-json) create_json_mode "${2:-New Mode}" "${3:-}" ;;
+    create-json-id) create_json_mode_id "${2:-}" "${3:-New Mode}" "${4:-}" ;;
+    delete) delete_mode "${2:-}" ;;
+    rename) rename_mode "${2:-}" "${3:-}" ;;
+    *) echo "usage: proxy-mode-ui list|read ID|save ID JSON|create SOURCE NAME|create-id ID SOURCE NAME|create-json NAME JSON|create-json-id ID NAME JSON|delete ID|rename ID NAME" >&2; exit 1 ;;
 esac
