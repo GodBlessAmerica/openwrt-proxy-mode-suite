@@ -31,17 +31,51 @@ luci-app-proxy-mode-1.0.0-r7.apk
 SHA256SUMS
 ```
 
-Copy to the router and install:
+### Direct download on the router
+
+```sh
+cd /tmp
+wget -O proxy-mode-core-1.0.0-r13.apk \
+  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/proxy-mode-core-1.0.0-r13.apk
+wget -O luci-app-proxy-mode-1.0.0-r7.apk \
+  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/luci-app-proxy-mode-1.0.0-r7.apk
+wget -O SHA256SUMS \
+  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/SHA256SUMS
+sha256sum -c SHA256SUMS
+```
+
+Expected verification:
+
+```text
+luci-app-proxy-mode-1.0.0-r7.apk: OK
+proxy-mode-core-1.0.0-r13.apk: OK
+```
+
+Install:
+
+```sh
+apk add --allow-untrusted /tmp/proxy-mode-core-1.0.0-r13.apk
+apk add --allow-untrusted /tmp/luci-app-proxy-mode-1.0.0-r7.apk
+```
+
+The Release APKs are not signed by an OpenWrt repository key, so `--allow-untrusted` is expected here. Only use it after downloading from this project's Release page and verifying `SHA256SUMS`.
+
+### Copy from another computer
 
 ```sh
 scp proxy-mode-core-*.apk root@ROUTER_IP:/tmp/
 scp luci-app-proxy-mode-*.apk root@ROUTER_IP:/tmp/
-
-apk add /tmp/proxy-mode-core-*.apk
-apk add /tmp/luci-app-proxy-mode-*.apk
+scp SHA256SUMS root@ROUTER_IP:/tmp/
 ```
 
-For trusted self-built development APKs only, OpenWrt may require `--allow-untrusted`.
+Then on the router:
+
+```sh
+cd /tmp
+sha256sum -c SHA256SUMS
+apk add --allow-untrusted /tmp/proxy-mode-core-*.apk
+apk add --allow-untrusted /tmp/luci-app-proxy-mode-*.apk
+```
 
 ## Fresh-router behavior
 
@@ -98,6 +132,21 @@ proxy-mode 6
 
 The first activation automatically changes `sing-box.main.enabled` to `1`.
 
+## Upstream interface pinning is optional
+
+Basic proxy operation and manual mode switching do not require `sing-box.main.ifaces` when a usable IPv4 default route already exists.
+
+For a router with a known WAN/WWAN interface, setting it is recommended because recovery after boot or reconnect can then wait for the intended interface rather than any default route.
+
+Example for a Wi-Fi STA uplink named `wwan`:
+
+```sh
+uci set sing-box.main.ifaces='wwan'
+uci commit sing-box
+```
+
+With this setting, recovery waits for `wwan` plus an IPv4 default route. Without it, the wrapper falls back to default-route readiness.
+
 ## Existing-router reinstall behavior
 
 The suite preserves production mode files. Selection order is:
@@ -117,6 +166,8 @@ Back up important routers before upgrades:
 
 ## Source installation from GitHub
 
+For development/recovery using the latest `main`:
+
 ```sh
 cd /tmp
 rm -rf openwrt-proxy-mode-suite openwrt-proxy-mode-suite-main proxy-mode-suite.tar.gz
@@ -135,6 +186,8 @@ Expected fresh-install output includes:
 Proxy Mode owns sing-box boot sequencing; unconditional sing-box autostart is disabled.
 Fresh install: no managed mode found; Proxy Mode remains unconfigured.
 ```
+
+For ordinary users, the tested Release APKs are preferred over installing the latest `main` source.
 
 ## Verify after installation
 
@@ -161,16 +214,9 @@ Then hard-refresh or use a private/incognito browser window.
 
 ## Boot and WWAN recovery
 
-Set the upstream interface explicitly, for example:
+Proxy Mode deliberately disables unconditional sing-box `rc.d` startup. The selected mode is started by Proxy Mode only after upstream readiness is confirmed.
 
-```sh
-uci set sing-box.main.ifaces='wwan'
-uci commit sing-box
-```
-
-Proxy Mode deliberately disables unconditional sing-box `rc.d` startup. The selected mode is started by Proxy Mode only after the configured upstream is ready.
-
-When `wwan` emits `ifup`, `/etc/hotplug.d/iface/99-proxy-mode` schedules recovery. Recovery is serialized with a lock so duplicate interface events do not create concurrent restart races. The wrapper waits for interface readiness and an IPv4 default route before restarting the selected mode.
+When a configured interface such as `wwan` emits `ifup`, `/etc/hotplug.d/iface/99-proxy-mode` schedules recovery. Recovery is serialized with a lock so duplicate interface events do not create concurrent restart races. The wrapper waits for interface readiness and an IPv4 default route before restarting the selected mode.
 
 Useful checks:
 
