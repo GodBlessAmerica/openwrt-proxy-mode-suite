@@ -89,7 +89,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          NOTES="OpenWrt Proxy Mode Suite ${RELEASE_TAG}\n\nTarget: OpenWrt 25.12.5, mediatek/filogic.\n\nIncludes proxy-mode-core runtime recovery/safety improvements and the LuCI frontend. See docs/INSTALL.md and docs/MIGRATION.md before installation."
+          NOTES="OpenWrt Proxy Mode Suite ${RELEASE_TAG}\n\nTarget: OpenWrt 25.12.5, mediatek/filogic.\n\nrc2 highlights:\n- refreshed LuCI status dashboard\n- proxy-mode-core r11 preserves the actually running valid sing-box configuration during reinstall\n- luci-app-proxy-mode r6 includes the updated dashboard\n- fresh routers remain unconfigured when no valid mode exists\n- expanded INSTALL and USAGE documentation\n\nSee README.md, docs/INSTALL.md, docs/USAGE.md and docs/MIGRATION.md."
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" dist/* --clobber
           else
