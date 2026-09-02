@@ -17,14 +17,16 @@ Download the current rc3 Release packages:
 
 ```sh
 cd /tmp
-wget -O proxy-mode-core-1.0.0-r13.apk \
+wget -4 -T 60 -O proxy-mode-core-1.0.0-r13.apk \
   https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/proxy-mode-core-1.0.0-r13.apk
-wget -O luci-app-proxy-mode-1.0.0-r7.apk \
+wget -4 -T 60 -O luci-app-proxy-mode-1.0.0-r7.apk \
   https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/luci-app-proxy-mode-1.0.0-r7.apk
-wget -O SHA256SUMS \
+wget -4 -T 60 -O SHA256SUMS \
   https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/SHA256SUMS
 sha256sum -c SHA256SUMS
 ```
+
+`-4` forces IPv4 and `-T 60` gives GitHub/Release CDN connections more time on routers with slow or inconsistent HTTPS setup. If a first download attempt times out, retry the same command.
 
 Install the verified packages:
 
