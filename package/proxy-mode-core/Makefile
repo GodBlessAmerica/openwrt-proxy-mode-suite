@@ -2,16 +2,13 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=11
+PKG_RELEASE:=12
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
 
 include $(INCLUDE_DIR)/package.mk
 
-# OpenWrt follows the package symlink and runs make with CURDIR at the real
-# checkout path: <repo>/package/proxy-mode-core. Therefore the repository root
-# is two directories above CURDIR, not one.
 SUITE_ROOT:=$(abspath $(CURDIR)/../..)
 
 define Package/proxy-mode-core
@@ -67,28 +64,39 @@ uci -q get sing-box.main >/dev/null 2>&1 || uci set sing-box.main='sing-box'
 uci set sing-box.main.user='root'
 uci -q get sing-box.main.ipv6_mode >/dev/null 2>&1 || uci set sing-box.main.ipv6_mode='allow'
 
-# Preserve the configuration that is actually running whenever possible. This
-# avoids a reinstall changing UCI to an older saved mode while sing-box is still
-# running another valid mode. Fall back to saved UCI, then mode1 only for a
-# fresh installation.
 runtime_conffile="$$(pgrep -af '/usr/bin/sing-box run' 2>/dev/null | sed -n 's#.*[[:space:]]-c[[:space:]]\([^[:space:]]*\).*#\1#p' | head -n 1 || true)"
 saved_conffile="$$(uci -q get sing-box.main.conffile 2>/dev/null || true)"
 selected_conffile=''
 
-if [ -n "$$runtime_conffile" ] && [ -f "$$runtime_conffile" ] && sing-box check -c "$$runtime_conffile" >/dev/null 2>&1; then
-	selected_conffile="$$runtime_conffile"
-elif [ -n "$$saved_conffile" ] && [ -f "$$saved_conffile" ] && sing-box check -c "$$saved_conffile" >/dev/null 2>&1; then
-	selected_conffile="$$saved_conffile"
-elif [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.json >/dev/null 2>&1; then
+case "$$runtime_conffile" in
+	/etc/sing-box/mode[0-9]*.json|/etc/sing-box/mode[0-9]*-ipv6-block.json)
+		[ -f "$$runtime_conffile" ] && sing-box check -c "$$runtime_conffile" >/dev/null 2>&1 && selected_conffile="$$runtime_conffile"
+		;;
+esac
+
+if [ -z "$$selected_conffile" ]; then
+	case "$$saved_conffile" in
+		/etc/sing-box/mode[0-9]*.json|/etc/sing-box/mode[0-9]*-ipv6-block.json)
+			[ -f "$$saved_conffile" ] && sing-box check -c "$$saved_conffile" >/dev/null 2>&1 && selected_conffile="$$saved_conffile"
+			;;
+	esac
+fi
+
+if [ -z "$$selected_conffile" ] && [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.json >/dev/null 2>&1; then
 	selected_conffile='/etc/sing-box/mode1.json'
 fi
 
 if [ -n "$$selected_conffile" ]; then
 	uci set sing-box.main.conffile="$$selected_conffile"
 	uci set sing-box.main.enabled='1'
+	/etc/init.d/sing-box enable >/dev/null 2>&1 || true
+else
+	uci -q delete sing-box.main.conffile || true
+	uci set sing-box.main.enabled='0'
+	/etc/init.d/sing-box stop >/dev/null 2>&1 || true
+	/etc/init.d/sing-box disable >/dev/null 2>&1 || true
 fi
 uci commit sing-box
-/etc/init.d/sing-box enable >/dev/null 2>&1 || true
 exit 0
 endef
 
