@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-proxy-mode
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=5
+PKG_RELEASE:=6
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
@@ -23,7 +23,7 @@ define Package/luci-app-proxy-mode
 endef
 
 define Package/luci-app-proxy-mode/description
- LuCI frontend for Proxy Mode Suite: status, dynamic mode management,
+ LuCI frontend for Proxy Mode Suite: status dashboard, dynamic mode management,
  IPv6 leak protection, service control and sing-box logs.
  This package ships static LuCI assets and an RPC helper only. It intentionally
  does not hard-select luci-base at build time so SDK package builds do not try to
