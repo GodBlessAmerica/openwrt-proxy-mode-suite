@@ -49,6 +49,13 @@ mode_number_from_config() {
     basename -- "$1" 2>/dev/null | sed -n 's/^mode\([0-9][0-9]*\)\(-ipv6-block\)\{0,1\}\.json$/\1/p'
 }
 
+enable_service() {
+    [ "$(uci -q get sing-box.main.enabled 2>/dev/null)" = "1" ] && return 0
+    uci set sing-box.main.enabled='1'
+    uci commit sing-box
+    "$SERVICE" enable >/dev/null 2>&1 || true
+}
+
 sync_route_exclude_for_mode() {
     number="$1"
     base="/etc/sing-box/mode${number}.json"
@@ -58,8 +65,6 @@ sync_route_exclude_for_mode() {
     is_ipv4 "$server" || return 0
     expected="${server}/32"
 
-    # Only auto-rewrite the simple single-/32 form. Complex exclusion lists are
-    # deliberately left alone because they may contain user-managed routes.
     if grep -Eq '"route_exclude_address"[[:space:]]*:[[:space:]]*\[[[:space:]]*"([0-9]{1,3}\.){3}[0-9]{1,3}/32"[[:space:]]*\]' "$base"; then
         current="$(sed -n 's/.*"route_exclude_address"[[:space:]]*:[[:space:]]*\[[[:space:]]*"\([0-9.]*\/32\)"[[:space:]]*\].*/\1/p' "$base" | head -n1)"
         [ "$current" = "$expected" ] && return 0
@@ -118,7 +123,9 @@ recover_current() {
     fi
     current="$(uci -q get "$UCI_KEY" 2>/dev/null)"
     number="$(mode_number_from_config "$current")"
-    [ -n "$number" ] && sync_route_exclude_for_mode "$number"
+    [ -n "$number" ] || { echo "当前没有已配置模式，跳过恢复。"; return 0; }
+    sync_route_exclude_for_mode "$number"
+    enable_service || return 1
     "$CORE" restart || return 1
     sleep 2
     if dns_healthy; then
@@ -138,6 +145,7 @@ switch_safely() {
 
     old_config="$(uci -q get "$UCI_KEY" 2>/dev/null)"
     sync_route_exclude_for_mode "$number" || return 1
+    enable_service || return 1
     "$CORE" "$number" || return 1
     sleep 2
 
@@ -146,7 +154,7 @@ switch_safely() {
     fi
 
     echo "错误：新模式启动后 DNS 健康检查失败，正在回滚。" >&2
-    if [ -n "$old_config" ] && [ -f "$old_config" ]; then
+    if [ -n "$old_config" ] && [ -f "$old_config" ] && [ "$old_config" != "$(uci -q get "$UCI_KEY" 2>/dev/null)" ]; then
         uci set "$UCI_KEY=$old_config"
         uci commit sing-box
         "$SERVICE" restart
@@ -158,7 +166,11 @@ switch_safely() {
 
 case "${1:-}" in
     status)
-        "$CORE" status
+        if [ -z "$(uci -q get "$UCI_KEY" 2>/dev/null)" ]; then
+            "$CORE" status | sed 's/^当前模式：未知模式$/当前模式：未配置/'
+        else
+            "$CORE" status
+        fi
         show_health
         ;;
     health)
@@ -175,7 +187,9 @@ case "${1:-}" in
         fi
         current="$(uci -q get "$UCI_KEY" 2>/dev/null)"
         number="$(mode_number_from_config "$current")"
-        [ -n "$number" ] && sync_route_exclude_for_mode "$number"
+        [ -n "$number" ] || { echo "错误：当前没有已配置模式。" >&2; exit 1; }
+        sync_route_exclude_for_mode "$number"
+        enable_service || exit 1
         "$CORE" "$1"
         ;;
     ''|*[!0-9]*)
