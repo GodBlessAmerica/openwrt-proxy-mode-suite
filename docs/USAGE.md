@@ -1,28 +1,14 @@
 # Usage Guide
 
-This guide covers day-to-day use after OpenWrt Proxy Mode Suite is installed.
-
 ## Open the LuCI page
 
-Open:
+Open **LuCI → Services → Proxy Mode**.
 
-**LuCI → Services → Proxy Mode**
+The dashboard shows service state, current mode, active config path, IPv6 leak protection, firewall/DNS health, configured modes and recent logs.
 
-The dashboard shows:
+If the page looks stale after an upgrade, hard-refresh or use a private/incognito window.
 
-- sing-box service state
-- current mode
-- active configuration path
-- IPv6 leak-protection state
-- IPv6 firewall state
-- DNS strategy
-- sing-box IPv6 reject-rule state
-- configured modes
-- recent log output
-
-If the page still looks like an older version after an upgrade, hard-refresh the browser (`Ctrl+Shift+R`) or open a private/incognito window. LuCI JavaScript may be cached by the browser.
-
-## Command-line quick reference
+## Quick reference
 
 ```sh
 proxy-mode status
@@ -36,37 +22,69 @@ proxy-mode restart
 proxy-mode stop
 ```
 
-### Show current state
+## Fresh router
 
-```sh
-proxy-mode status
+With no managed `modeN.json`, rc3 reports:
+
+```text
+当前模式：未配置
+配置文件：未设置
+运行状态：已停止
 ```
 
-Typical output includes the current mode, configuration file, IPv6 protection, DNS policy and whether sing-box is running.
+The official default `/etc/sing-box/config.json` is not treated as a Proxy Mode configuration.
 
-### Switch mode
+## Add a mode in LuCI
 
-To switch to mode 6:
+In **Mode Manager**:
+
+1. Click **Add Mode**.
+2. Enter an explicit **Mode Number** from 1 to 999.
+3. Use **Custom JSON** for a new configuration, or clone an existing mode.
+4. Enter a descriptive name.
+5. Create the mode.
+
+Example: Mode Number `6` creates `/etc/sing-box/mode6.json`.
+
+The backend validates custom JSON with `sing-box check` before creating the file.
+
+## Switch mode
 
 ```sh
 proxy-mode 6
 ```
 
-The wrapper waits for the upstream/default route, validates the candidate configuration, starts it, tests local DNS and rolls back if the DNS health check fails.
+The wrapper waits for the configured upstream/default route, enables sing-box when activating the first real managed mode, starts the candidate, checks DNS and rolls back when appropriate.
 
-### Restart the current mode
+## Restart current mode
 
 ```sh
 proxy-mode restart
 ```
 
-### Recover after WAN/WWAN comes back
+## WWAN recovery
+
+Configure the upstream interface:
 
 ```sh
-proxy-mode recover
+uci set sing-box.main.ifaces='wwan'
+uci commit sing-box
 ```
 
-This is also called by the iface hotplug hook when the configured upstream becomes ready after boot.
+Proxy Mode disables unconditional sing-box rc.d autostart. After boot, the selected mode is started only after the configured upstream is ready.
+
+When `wwan` comes up, the hotplug hook schedules serialized recovery. Duplicate triggers are skipped while a recovery is already running.
+
+Diagnostics:
+
+```sh
+ubus call network.interface.wwan status
+ip -4 route
+proxy-mode status
+pgrep -af sing-box
+cat /tmp/proxy-mode-recover.log 2>/dev/null
+logread | grep -Ei 'proxy-mode|sing-box|wwan' | tail -100
+```
 
 ## IPv6 leak protection
 
@@ -76,118 +94,45 @@ Block IPv6:
 proxy-mode ipv6 block
 ```
 
-Allow IPv6 again:
+Allow it again:
 
 ```sh
 proxy-mode ipv6 allow
 ```
 
-When IPv6 protection is enabled, the suite creates an `-ipv6-block.json` variant for the selected base mode, blocks LAN/router IPv6 egress and uses an IPv4-only DNS strategy where required.
+When protection is active, Proxy Mode generates a `modeN-ipv6-block.json` variant and reports firewall, DNS-strategy and sing-box IPv6-rule health.
 
-Check it with:
+Edit the base `modeN.json`, not the generated protected variant.
 
-```sh
-proxy-mode status
-```
-
-A healthy blocked state should report the firewall, DNS strategy and sing-box IPv6 rule as normal.
-
-## Mode files
-
-Base mode files live under:
-
-```text
-/etc/sing-box/mode1.json
-/etc/sing-box/mode2.json
-/etc/sing-box/mode3.json
-...
-```
-
-Generated IPv6-block variants use names such as:
-
-```text
-/etc/sing-box/mode6-ipv6-block.json
-```
-
-Do not treat generated `-ipv6-block.json` files as the canonical configuration. Edit the base `modeN.json`; the protected variant is regenerated automatically.
-
-Validate a base mode manually with:
+Validate manually:
 
 ```sh
 sing-box check -c /etc/sing-box/mode6.json
 ```
 
-## Fresh-router behavior
+## Mode files
 
-The project intentionally does not ship real production mode JSON files because they normally contain private node credentials.
-
-On a fresh router with no valid running config, no valid saved `sing-box.main.conffile`, and no `/etc/sing-box/mode1.json`, the suite leaves the proxy unconfigured instead of inventing a mode.
-
-If a valid mode is already running during reinstall, rc2 preserves that actual runtime configuration first. If nothing is running, it preserves a valid saved UCI configuration. Only a fresh installation with a valid `mode1.json` falls back to mode 1.
-
-## Adding a mode in LuCI
-
-In **Services → Proxy Mode → Mode Manager**:
-
-1. Click **Add Mode**.
-2. Clone an existing working mode or choose custom JSON.
-3. Give the mode a descriptive name.
-4. Save the JSON.
-5. The backend validates it with `sing-box check` before replacing a working configuration.
-
-You can also edit, rename, switch and delete non-current modes from the same page.
-
-## Useful diagnostics
-
-Check upstream state:
-
-```sh
-ubus call network.interface.wwan status
-ip -4 route
+```text
+/etc/sing-box/mode1.json
+/etc/sing-box/mode6.json
+/etc/sing-box/mode6-ipv6-block.json
 ```
 
-Check local DNS:
+Names are stored in `/etc/config/proxy-mode`; the numeric ID controls the filename and switching command.
 
-```sh
-nslookup www.google.com 127.0.0.1
-```
+## Export/import
 
-Check sing-box process and actual config:
-
-```sh
-pgrep -af sing-box
-```
-
-Check recent logs:
-
-```sh
-logread | grep -Ei 'proxy-mode|sing-box|wwan'
-```
-
-If UCI and the running process ever appear to disagree, compare:
-
-```sh
-uci -q get sing-box.main.conffile
-pgrep -af sing-box
-```
-
-The rc2 installer/package logic is designed to preserve the actually running valid configuration during reinstall to avoid this mismatch.
-
-## Export and import
-
-Export from the old router:
+Export:
 
 ```sh
 /usr/libexec/proxy-mode-export
 ```
 
-Copy the generated archive to the new router, install the suite, then import it:
+Import:
 
 ```sh
 /usr/libexec/proxy-mode-import /tmp/proxy-mode-backup-YYYYMMDD-HHMMSS.tar.gz
 ```
-
-Review the restored configuration before switching traffic.
 
 ## Security
 
