@@ -50,10 +50,13 @@ mode_number_from_config() {
 }
 
 enable_service() {
-    [ "$(uci -q get sing-box.main.enabled 2>/dev/null)" = "1" ] && return 0
-    uci set sing-box.main.enabled='1'
-    uci commit sing-box
-    "$SERVICE" enable >/dev/null 2>&1 || true
+    [ "$(uci -q get sing-box.main.enabled 2>/dev/null)" = "1" ] || {
+        uci set sing-box.main.enabled='1'
+        uci commit sing-box
+    }
+    # Proxy Mode owns boot sequencing; keep the official service disabled from
+    # unconditional rc.d boot while still using its start/restart implementation.
+    "$SERVICE" disable >/dev/null 2>&1 || true
 }
 
 sync_route_exclude_for_mode() {
