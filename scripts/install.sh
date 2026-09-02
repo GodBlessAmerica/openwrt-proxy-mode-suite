@@ -36,6 +36,12 @@ cp "$ROOT/luci-app-proxy-mode/www/luci-static/resources/view/proxy-mode.js" /www
 chmod 755 /usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode
 
 [ -f /etc/config/proxy-mode ] || cp "$ROOT/core/etc/config/proxy-mode" /etc/config/proxy-mode
+# Remove the placeholder registry left by pre-fix development installs only when
+# no real mode1 file exists. User-created entries are otherwise preserved.
+if [ ! -f /etc/sing-box/mode1.json ] && [ "$(uci -q get proxy-mode.mode1.name 2>/dev/null || true)" = "Example Mode 1" ]; then
+  uci -q delete proxy-mode.mode1 || true
+  uci commit proxy-mode
+fi
 mkdir -p /etc/sing-box
 
 RUNTIME_CONFIG="$(pgrep -af '/usr/bin/sing-box run' 2>/dev/null | sed -n 's#.*[[:space:]]-c[[:space:]]\([^[:space:]]*\).*#\1#p' | head -n 1 || true)"
