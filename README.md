@@ -56,6 +56,17 @@ sing-box check -c /etc/sing-box/mode6.json
 proxy-mode 6
 ```
 
+Optional: you may change the router LAN subnet before or after installation. This is not required by Proxy Mode. For example, to use `10.88.0.1/24`:
+
+```sh
+uci set network.lan.ipaddr='10.88.0.1'
+uci set network.lan.netmask='255.255.255.0'
+uci commit network
+/etc/init.d/network restart
+```
+
+Changing the LAN address disconnects the current SSH/LuCI session. Reconnect using the new address, for example `10.88.0.1`. Choose a subnet that does not conflict with the upstream network. See `docs/INSTALL.md` for more detail.
+
 ## Highlights
 
 - Manage numeric sing-box modes such as `mode1.json`, `mode6.json`, ...
