@@ -1,2 +1,2 @@
-config mode 'mode1'
-	option name 'Example Mode 1'
+# Proxy Mode registry
+# Mode entries are created when real modeN.json configurations are added.
