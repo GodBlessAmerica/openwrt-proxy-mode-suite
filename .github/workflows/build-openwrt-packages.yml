@@ -83,9 +83,13 @@ jobs:
             -name 'luci-app-proxy-mode-*.apk' -o -name 'luci-app-proxy-mode_*.apk' -o \
             -name 'luci-app-proxy-mode-*.ipk' -o -name 'luci-app-proxy-mode_*.ipk' \
           \) -exec cp -v {} dist/ \;
-          test -n "$(find dist -type f -print -quit)"
-          (cd dist && sha256sum *.apk *.ipk 2>/dev/null > SHA256SUMS || sha256sum * > SHA256SUMS)
-          ls -lah dist
+          test -n "$(find dist -maxdepth 1 -type f \( -name '*.apk' -o -name '*.ipk' \) -print -quit)"
+          cd dist
+          find . -maxdepth 1 -type f \( -name '*.apk' -o -name '*.ipk' \) -printf '%f\n' \
+            | sort \
+            | xargs sha256sum > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          ls -lah
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
