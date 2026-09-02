@@ -1,131 +1,186 @@
 # OpenWrt Proxy Mode Suite
 
-Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 leak protection, safe configuration validation, migration tooling, runtime health checks, upstream recovery, and reproducible OpenWrt package builds.
+Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 leak protection, safe validation/rollback, upstream recovery, migration tools and reproducible OpenWrt package builds.
 
-> Status: **v1.0.0 release candidate**. `proxy-mode-core` and `luci-app-proxy-mode` have been successfully built as APK packages with the official OpenWrt 25.12.5 `mediatek/filogic` SDK and installed on a RAX3000M reference router. Core/LuCI installation, saved-mode preservation, IPv6 block state, WWAN recovery, DNS resolution and Internet access have all been exercised on real hardware. Additional mode-switch regression testing remains before the first public Release.
+> Current version: **v1.0.0-rc2**. Reference build/runtime validation is OpenWrt 25.12.5 on `mediatek/filogic` with a RAX3000M reference router.
+
+## What it does
+
+- Manage numeric sing-box modes such as `mode1.json`, `mode2.json`, ...
+- Switch modes from CLI or LuCI.
+- Add, clone, edit, rename and delete modes from **LuCI → Services → Proxy Mode**.
+- Validate configuration with `sing-box check` before replacing a working file.
+- Generate `modeN-ipv6-block.json` variants for IPv6 leak protection.
+- Block IPv6 from LAN clients and router-originated traffic when protection is enabled.
+- Wait for WAN/WWAN/default-route readiness before start/restart/switch.
+- Recover automatically when the configured upstream interface comes up after boot.
+- Test local DNS after a mode switch and roll back when the new mode fails health checks.
+- Export/import configuration when migrating to another OpenWrt router.
 
 ## Ownership boundary
 
-The suite intentionally **does not replace the official OpenWrt sing-box package**.
+The suite **does not replace the official OpenWrt sing-box package**.
 
-The official `sing-box` package owns:
+Official `sing-box` owns:
 
-- `/usr/bin/sing-box`
-- `/etc/init.d/sing-box`
-- `/etc/config/sing-box`
-- `/etc/sing-box/`
+```text
+/usr/bin/sing-box
+/etc/init.d/sing-box
+/etc/config/sing-box
+/etc/sing-box/
+```
 
-Proxy Mode Suite owns only its management layer:
+Proxy Mode Suite owns its management layer:
 
-- `/usr/bin/proxy-mode` (runtime safety wrapper)
-- `/usr/libexec/proxy-mode-core` (mode-management core)
-- `/etc/config/proxy-mode`
-- `/etc/hotplug.d/iface/99-proxy-mode`
-- `/usr/libexec/proxy-mode-*`
-- LuCI menu / ACL / JavaScript view
-- Mode lifecycle, IPv6 policy, validation, export/import
+```text
+/usr/bin/proxy-mode
+/usr/libexec/proxy-mode-core
+/usr/libexec/proxy-mode-export
+/usr/libexec/proxy-mode-import
+/etc/config/proxy-mode
+/etc/hotplug.d/iface/99-proxy-mode
+LuCI menu / ACL / JavaScript view
+```
 
 This separation avoids package-file conflicts and lets OpenWrt update sing-box normally.
 
-## Features
+## rc2 changes
 
-- Dynamic numeric modes (`mode1.json`, `mode2.json`, ... up to 999).
-- LuCI page at **Services → Proxy Mode**.
-- Add / edit / clone / rename / delete modes.
-- Custom JSON creation as a permanent fallback for future sing-box protocols.
-- `sing-box check` validation before edited/generated configs replace working files.
-- IPv6 leak-protection mode generating `modeN-ipv6-block.json` from the base mode.
-- Firewall protection for LAN and router-originated IPv6.
-- Runtime health output for upstream route and local DNS.
-- Wait for configured upstream interface/default route before manual start/restart/switch.
-- Interface hotplug recovery when the configured WAN/WWAN becomes ready after boot.
-- DNS health check after mode switches with rollback to the previous configuration on failure.
-- Automatic synchronization of a simple single-host `route_exclude_address` with the selected mode's first outbound IPv4 server.
-- Safe mode deletion by moving files to `/root/proxy-mode-deleted/`.
-- Export/import tools for migration to a new OpenWrt installation.
-- Standard OpenWrt package definitions for `proxy-mode-core` and `luci-app-proxy-mode`.
-- GitHub Actions builds with selectable OpenWrt release, target and subtarget.
-- Optional GitHub Release publishing with package files and `SHA256SUMS`.
+- New LuCI status dashboard with clear service, current-mode and IPv6/DNS health indicators.
+- Browser-side cache troubleshooting documented for LuCI upgrades.
+- Source installer now preserves the **actually running valid sing-box config** first during reinstall.
+- `proxy-mode-core` package post-install logic now follows the same preservation rule.
+- Fresh routers with no valid mode remain unconfigured instead of inventing a default proxy mode.
+- Expanded installation and day-to-day usage documentation.
 
-## RAX3000M runtime findings
-
-The reference router uses a 5 GHz STA uplink (`wwan`) while also serving AP clients. Real-hardware testing exposed two important operational details:
-
-1. **Boot timing:** sing-box may start before the Wi-Fi STA has DHCP/default route. The package now includes an iface hotplug recovery hook and a runtime wrapper that waits for upstream readiness before manual start/restart/switch operations.
-2. **Multiple STA profiles:** enabling multiple 5 GHz STA interfaces on the same radio and assigning both to the same `wwan` can leave `wwan` unavailable. On the reference router, keeping the intended uplink enabled and disabling the unused backup STA restored DHCP, DNS and the default route.
-
-The tested working chain was:
+Package revisions for rc2:
 
 ```text
-5 GHz STA uplink → wwan DHCP → default route → sing-box TUN → DNS hijack → selected mode
+proxy-mode-core-1.0.0-r11.apk
+luci-app-proxy-mode-1.0.0-r6.apk
 ```
 
-## Repository layout
+## Install
 
-```text
-.
-├── README.md
-├── VERSION
-├── LICENSE
-├── core/
-├── luci-app-proxy-mode/
-├── package/
-│   ├── proxy-mode-core/Makefile
-│   └── luci-app-proxy-mode/Makefile
-├── scripts/
-│   ├── proxy-mode-wrapper.sh
-│   ├── 99-proxy-mode
-│   ├── prepare-sdk.sh
-│   ├── install.sh
-│   ├── uninstall.sh
-│   ├── export-config.sh
-│   └── import-config.sh
-├── docs/
-└── .github/workflows/build-openwrt-packages.yml
-```
+The preferred method is to download the two APKs plus `SHA256SUMS` from GitHub Releases.
 
-## Security rule
+The router must already have the official OpenWrt `sing-box` package. The GUI additionally requires LuCI, `rpcd` and `uhttpd`.
 
-This repository should contain **software and templates only**. Do not commit real node credentials, UUIDs, passwords, private keys, subscription URLs, production `modeN.json` files, SSH keys, or locally built APK/IPK binaries into the source tree.
-
-Release binaries belong in **GitHub Releases**, not in `main`.
-
-## Install from release/test packages
-
-The preferred distribution contains two files:
-
-- `proxy-mode-core-*.apk`
-- `luci-app-proxy-mode-*.apk`
-
-The target router must already have the official `sing-box` package. For the GUI it must also already have a working LuCI installation with `rpcd` and `uhttpd`.
-
-Copy the packages to the router, for example:
+Install:
 
 ```sh
-scp proxy-mode-core-*.apk root@ROUTER_IP:/tmp/
-scp luci-app-proxy-mode-*.apk root@ROUTER_IP:/tmp/
+apk add /tmp/proxy-mode-core-*.apk
+apk add /tmp/luci-app-proxy-mode-*.apk
 ```
 
-Officially signed Release packages can be installed normally. During local development, self-built packages may need offline/untrusted flags:
+Then verify:
 
 ```sh
-apk add --no-network --allow-untrusted /tmp/proxy-mode-core-*.apk
-apk add --no-network --allow-untrusted /tmp/luci-app-proxy-mode-*.apk
+proxy-mode status
+proxy-mode health
 ```
 
-After installation:
+Open:
+
+**LuCI → Services → Proxy Mode**
+
+Detailed instructions: [`docs/INSTALL.md`](docs/INSTALL.md)
+
+## Use
+
+Common commands:
 
 ```sh
-/etc/init.d/rpcd restart
-/etc/init.d/uhttpd restart
+proxy-mode status
+proxy-mode health
+proxy-mode recover
+proxy-mode <number>
+proxy-mode ipv6 block
+proxy-mode ipv6 allow
+proxy-mode start
+proxy-mode restart
+proxy-mode stop
+```
+
+Example, switch to mode 6:
+
+```sh
+proxy-mode 6
+```
+
+Detailed guide: [`docs/USAGE.md`](docs/USAGE.md)
+
+## Fresh-router behavior
+
+The repository intentionally contains no real production `modeN.json` files because those files often contain private server information and credentials.
+
+On a fresh router:
+
+1. if a valid sing-box config is already running, reinstall preserves it;
+2. otherwise a valid saved `sing-box.main.conffile` is preserved;
+3. otherwise a valid `/etc/sing-box/mode1.json` may be used as the initial mode;
+4. if none exists, Proxy Mode remains unconfigured until you add a mode.
+
+## Existing-router reinstall behavior
+
+rc2 prioritizes the configuration actually used by the running sing-box process. This avoids a reinstall changing UCI to an older mode while sing-box continues running a different one.
+
+You can compare saved and actual runtime state with:
+
+```sh
+uci -q get sing-box.main.conffile
+pgrep -af sing-box
+```
+
+## IPv6 leak protection
+
+Enable:
+
+```sh
+proxy-mode ipv6 block
+```
+
+Disable:
+
+```sh
+proxy-mode ipv6 allow
+```
+
+When enabled, the status page/CLI reports firewall state, DNS strategy and sing-box IPv6 reject-rule health.
+
+## WWAN recovery
+
+The reference RAX3000M uses a 5 GHz STA uplink (`wwan`). Real-hardware testing showed sing-box can start before Wi-Fi STA DHCP/default-route readiness. The suite includes an iface hotplug recovery hook and runtime readiness checks.
+
+Useful diagnostics:
+
+```sh
+ubus call network.interface.wwan status
+ip -4 route
+nslookup www.google.com 127.0.0.1
 proxy-mode status
 ```
 
-Open **LuCI → Services → Proxy Mode**.
+If multiple STA profiles are assigned to the same `wwan`, test carefully; on the reference router, two enabled 5 GHz STA profiles on the same radio caused `wwan` to remain unavailable.
 
-Before installing on an important existing router, back up `/etc/sing-box/`, `/etc/config/sing-box` and `/etc/config/proxy-mode`.
+## Source installation
 
-## Build locally with the official SDK
+For development/recovery using the latest `main`:
+
+```sh
+cd /tmp
+wget -O proxy-mode-suite.tar.gz \
+  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/archive/refs/heads/main.tar.gz
+
+tar -xzf proxy-mode-suite.tar.gz
+mv openwrt-proxy-mode-suite-main openwrt-proxy-mode-suite
+cd openwrt-proxy-mode-suite
+sh scripts/install.sh
+```
+
+If the router needs its current proxy to reach GitHub, download the new source **before** stopping/replacing the current proxy management layer.
+
+## Build locally
 
 Reference SDK:
 
@@ -136,69 +191,68 @@ Subtarget: filogic
 Toolchain: GCC 14.3.0 / musl
 ```
 
-Clone the repository next to your SDK and run:
+Build:
 
 ```sh
-cd openwrt-proxy-mode-suite
-git pull
 sh scripts/prepare-sdk.sh /path/to/sdk
-
 cd /path/to/sdk
 make package/proxy-mode-suite/proxy-mode-core/compile V=s -j1
 make package/proxy-mode-suite/luci-app-proxy-mode/compile V=s -j1
 ```
 
-Successful APKs are placed under a path similar to:
-
-```text
-bin/packages/aarch64_cortex-a53/base/
-```
-
-The current package Makefiles intentionally avoid hard-selecting the full `sing-box` and LuCI dependency trees during SDK package-only builds. Those runtimes are checked on the target router instead.
-
-## Runtime commands
-
-```sh
-proxy-mode status
-proxy-mode health
-proxy-mode recover
-proxy-mode <number>
-proxy-mode ipv6 block
-proxy-mode ipv6 allow
-proxy-mode restart
-```
-
-`proxy-mode status` now reports both sing-box state and upstream/DNS health. `proxy-mode recover` waits for the configured upstream interface/default route and then regenerates the active IPv6-block variant if needed before restarting the saved mode.
-
-## GitHub Actions and Releases
-
-Open **Actions → Build OpenWrt packages → Run workflow**.
-
-Default reference values:
-
-```text
-OpenWrt version: 25.12.5
-Target: mediatek
-Subtarget: filogic
-Release tag: (empty)
-```
-
-Leave `release_tag` empty for a test artifact. After a build has been installed and smoke-tested on the reference router, publish a semantic release tag such as `v1.0.0` so users can download the packages from GitHub Releases.
-
-Release assets should include both packages and `SHA256SUMS`.
+See [`docs/PACKAGING.md`](docs/PACKAGING.md).
 
 ## Migration
 
-On the old router:
+Export on the old router:
 
 ```sh
 /usr/libexec/proxy-mode-export
 ```
 
-On the new router, after installing the suite:
+Import on the new router after installation:
 
 ```sh
 /usr/libexec/proxy-mode-import /tmp/proxy-mode-backup-YYYYMMDD-HHMMSS.tar.gz
+```
+
+See [`docs/MIGRATION.md`](docs/MIGRATION.md).
+
+## Security
+
+This repository should contain **software and templates only**. Do not commit or publish:
+
+- production `modeN.json` files
+- node/server credentials
+- UUIDs or passwords
+- private keys / short IDs
+- subscription URLs
+- SSH keys
+- access tokens
+- exported production configuration archives
+
+Release binaries belong in GitHub Releases rather than the source tree.
+
+See [`docs/SECURITY.md`](docs/SECURITY.md).
+
+## Repository layout
+
+```text
+.
+├── README.md
+├── VERSION
+├── core/
+├── luci-app-proxy-mode/
+├── package/
+├── scripts/
+├── docs/
+│   ├── INSTALL.md
+│   ├── USAGE.md
+│   ├── MIGRATION.md
+│   ├── PACKAGING.md
+│   ├── ARCHITECTURE.md
+│   └── SECURITY.md
+└── .github/workflows/
 ```
 
 ## Reference environment
@@ -213,39 +267,6 @@ Successfully package-built and runtime-tested with:
 - GCC 14.3.0 / musl
 - sing-box 1.13.x
 
-Target runtime expects:
+## License
 
-- official OpenWrt `sing-box`
-- LuCI for the GUI package
-- `rpcd`
-- `uhttpd`
-- `uci`
-- `jsonfilter`
-- TUN/kernel support required by the selected sing-box mode
-
-## Release checklist
-
-- [x] `proxy-mode-core` builds successfully as APK with the reference SDK.
-- [x] `luci-app-proxy-mode` builds successfully as APK with the reference SDK.
-- [x] Both APKs install successfully on the RAX3000M reference router.
-- [x] Existing saved mode and IPv6-block UCI state survive package installation.
-- [x] `proxy-mode status` works after package installation.
-- [x] LuCI opens and can invoke the installed management layer.
-- [x] WWAN DHCP/default route/DNS recovery was verified on real hardware after correcting the active STA profile.
-- [ ] Rebuild and install `proxy-mode-core` r10, then verify hotplug recovery after a cold reboot.
-- [ ] Switch between at least two known-good modes and verify DNS-health rollback behavior.
-- [ ] IPv6 block/allow toggles and restores correctly after r10 upgrade.
-- [ ] Invalid JSON is rejected by `sing-box check`.
-- [ ] Current mode cannot be deleted.
-- [ ] Export/import is tested with a disposable backup.
-- [ ] Release contains package files plus `SHA256SUMS`.
-- [ ] No secrets are present in Git history or release assets.
-
-## Remaining roadmap
-
-- [ ] Complete r10 cold-boot/hotplug regression test on RAX3000M.
-- [ ] Publish the first tested GitHub Release.
-- [ ] Test an older SDK to confirm IPK output.
-- [ ] Add richer graphical forms for Reality, WebSocket, gRPC, Hysteria2 obfs, TUIC and advanced TLS.
-- [ ] Add GUI-based export/import.
-- [ ] Add automated runtime smoke tests where practical.
+MIT
