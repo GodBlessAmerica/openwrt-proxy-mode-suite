@@ -15,23 +15,9 @@ on:
         description: OpenWrt subtarget
         required: true
         default: 'filogic'
-      release_tag:
-        description: Optional release tag, e.g. v1.0.0 or v1.0.0-rc1 (leave empty for artifact-only build)
-        required: false
-        default: ''
-  push:
-    branches: [ main ]
-    tags: [ 'v*' ]
-    paths:
-      - 'core/**'
-      - 'luci-app-proxy-mode/**'
-      - 'package/**'
-      - 'scripts/**'
-      - '.github/release-trigger'
-      - '.github/workflows/build-openwrt-packages.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: openwrt-packages-${{ github.workflow }}-${{ github.ref }}
@@ -41,9 +27,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      OPENWRT_VERSION: ${{ github.event.inputs.openwrt_version || '25.12.5' }}
-      OPENWRT_TARGET: ${{ github.event.inputs.target || 'mediatek' }}
-      OPENWRT_SUBTARGET: ${{ github.event.inputs.subtarget || 'filogic' }}
+      OPENWRT_VERSION: ${{ inputs.openwrt_version }}
+      OPENWRT_TARGET: ${{ inputs.target }}
+      OPENWRT_SUBTARGET: ${{ inputs.subtarget }}
 
     steps:
       - name: Checkout
@@ -66,7 +52,6 @@ jobs:
             echo "Unable to locate an SDK for $OPENWRT_VERSION $OPENWRT_TARGET/$OPENWRT_SUBTARGET" >&2
             exit 1
           fi
-          echo "SDK_FILE=$SDK_FILE" >> "$GITHUB_ENV"
           curl -fL "$BASE/$SDK_FILE" -o "$RUNNER_TEMP/$SDK_FILE"
           mkdir -p "$RUNNER_TEMP/openwrt-sdk"
           tar -xf "$RUNNER_TEMP/$SDK_FILE" -C "$RUNNER_TEMP/openwrt-sdk" --strip-components=1
@@ -76,32 +61,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          chmod +x "$GITHUB_WORKSPACE/scripts/prepare-sdk.sh"
-          "$GITHUB_WORKSPACE/scripts/prepare-sdk.sh" "$SDK_DIR"
+          chmod +x scripts/prepare-sdk.sh
+          scripts/prepare-sdk.sh "$SDK_DIR"
 
       - name: Build packages
         shell: bash
         run: |
           set -euo pipefail
           cd "$SDK_DIR"
-          JOBS="$(nproc)"
-          make -j"$JOBS" package/proxy-mode-suite/proxy-mode-core/compile V=s
-          make -j"$JOBS" package/proxy-mode-suite/luci-app-proxy-mode/compile V=s
+          make package/proxy-mode-suite/proxy-mode-core/compile V=s -j1
+          make package/proxy-mode-suite/luci-app-proxy-mode/compile V=s -j1
 
       - name: Collect packages
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/dist"
+          mkdir -p dist
           find "$SDK_DIR/bin" -type f \( \
             -name 'proxy-mode-core-*.apk' -o -name 'proxy-mode-core_*.apk' -o \
             -name 'proxy-mode-core-*.ipk' -o -name 'proxy-mode-core_*.ipk' -o \
             -name 'luci-app-proxy-mode-*.apk' -o -name 'luci-app-proxy-mode_*.apk' -o \
             -name 'luci-app-proxy-mode-*.ipk' -o -name 'luci-app-proxy-mode_*.ipk' \
-          \) -print -exec cp -v {} "$GITHUB_WORKSPACE/dist/" \;
-          test -n "$(find "$GITHUB_WORKSPACE/dist" -type f -print -quit)"
-          (cd "$GITHUB_WORKSPACE/dist" && sha256sum * > SHA256SUMS)
-          ls -lah "$GITHUB_WORKSPACE/dist"
+          \) -exec cp -v {} dist/ \;
+          test -n "$(find dist -type f -print -quit)"
+          (cd dist && sha256sum *.apk *.ipk 2>/dev/null > SHA256SUMS || sha256sum * > SHA256SUMS)
+          ls -lah dist
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -109,33 +93,3 @@ jobs:
           name: proxy-mode-${{ env.OPENWRT_VERSION }}-${{ env.OPENWRT_TARGET }}-${{ env.OPENWRT_SUBTARGET }}
           path: dist/
           if-no-files-found: error
-
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '') || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: v'))
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MANUAL_TAG: ${{ github.event.inputs.release_tag }}
-          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="$MANUAL_TAG"
-          if [ -z "$TAG" ] && [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            TAG="$GITHUB_REF_NAME"
-          fi
-          if [ -z "$TAG" ]; then
-            TAG="$(printf '%s\n' "$HEAD_COMMIT_MESSAGE" | sed -n 's/^release: \(v[^[:space:]]*\).*$/\1/p' | head -n1)"
-          fi
-          case "$TAG" in
-            v[0-9]*.[0-9]*.[0-9]*) ;;
-            *) echo "Invalid release tag: $TAG (expected vMAJOR.MINOR.PATCH or prerelease suffix)" >&2; exit 1 ;;
-          esac
-          NOTES="OpenWrt Proxy Mode Suite packages for OpenWrt ${OPENWRT_VERSION} ${OPENWRT_TARGET}/${OPENWRT_SUBTARGET}. This release includes proxy-mode-core runtime recovery/safety improvements and the LuCI frontend. See docs/INSTALL.md and docs/MIGRATION.md before installation or migration."
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            if [[ "$TAG" == *-* ]]; then
-              gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes "$NOTES" --prerelease
-            else
-              gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes "$NOTES"
-            fi
-          fi
-          gh release upload "$TAG" dist/* --clobber
