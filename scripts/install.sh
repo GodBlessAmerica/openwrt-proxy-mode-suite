@@ -35,19 +35,36 @@ chmod 755 /usr/bin/proxy-mode /usr/libexec/proxy-mode-ui
 [ -f /etc/config/proxy-mode ] || cp "$ROOT/core/etc/config/proxy-mode" /etc/config/proxy-mode
 mkdir -p /etc/sing-box
 
+# Preserve the live mode during reinstall. A running sing-box process is the strongest
+# source of truth, followed by the saved UCI path. Only fall back to mode1 on a fresh
+# installation where neither of those points to a valid configuration.
+RUNTIME_CONFIG="$(pgrep -af '/usr/bin/sing-box run' 2>/dev/null | sed -n 's#.*[[:space:]]-c[[:space:]]\([^[:space:]]*\).*#\1#p' | head -n 1 || true)"
+SAVED_CONFIG="$(uci -q get sing-box.main.conffile 2>/dev/null || true)"
+SELECTED_CONFIG=''
+
+if [ -n "$RUNTIME_CONFIG" ] && [ -f "$RUNTIME_CONFIG" ] && sing-box check -c "$RUNTIME_CONFIG" >/dev/null 2>&1; then
+  SELECTED_CONFIG="$RUNTIME_CONFIG"
+elif [ -n "$SAVED_CONFIG" ] && [ -f "$SAVED_CONFIG" ] && sing-box check -c "$SAVED_CONFIG" >/dev/null 2>&1; then
+  SELECTED_CONFIG="$SAVED_CONFIG"
+elif [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.json >/dev/null 2>&1; then
+  SELECTED_CONFIG='/etc/sing-box/mode1.json'
+fi
+
 uci set sing-box.main.user='root'
 uci -q get sing-box.main.ipv6_mode >/dev/null 2>&1 || uci set sing-box.main.ipv6_mode='allow'
-if [ -f /etc/sing-box/mode1.json ] && sing-box check -c /etc/sing-box/mode1.json >/dev/null 2>&1; then
-  uci set sing-box.main.conffile='/etc/sing-box/mode1.json'
+if [ -n "$SELECTED_CONFIG" ]; then
+  uci set sing-box.main.conffile="$SELECTED_CONFIG"
   uci set sing-box.main.enabled='1'
 fi
 uci commit sing-box
 
 rm -f /tmp/luci-indexcache
+rm -rf /tmp/luci-modulecache/* 2>/dev/null || true
 /etc/init.d/rpcd restart
 /etc/init.d/uhttpd restart
 
 echo "Installed OpenWrt Proxy Mode Suite."
 echo "Official sing-box service files were preserved."
+[ -z "$SELECTED_CONFIG" ] || echo "Preserved active config: $SELECTED_CONFIG"
 echo "Backup: $BACKUP"
 echo "LuCI: Services -> Proxy Mode"
