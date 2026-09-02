@@ -21,7 +21,38 @@ return view.extend({
  reload(){return this.load().then(L.bind(function(d){const n=document.querySelector('#proxy-mode-root');if(n)n.replaceWith(this.render(d));},this));},
  action(p,a,title){ui.showModal(title,[E('p',{'class':'spinning'},[_('Applying…')])]);return run(p,a).then(L.bind(function(r){ui.hideModal();if(r.code!==0){err(r);return;}ui.addNotification(null,E('p',{},[r.stdout||_('Done')]),'info');return this.reload();},this));},
  edit(m){ui.showModal(_('Loading Mode ')+m.id,[E('p',{'class':'spinning'},[_('Loading…')])]);return run(MGR,['read',m.id]).then(L.bind(function(r){if(r.code!==0){ui.hideModal();err(r);return;}const name=E('input',{'class':'cbi-input-text','value':m.name,'style':'width:100%'});const ta=E('textarea',{'class':'cbi-input-textarea','style':'width:100%;min-height:480px;font-family:monospace'},[r.stdout]);ui.showModal(_('Edit Mode ')+m.id,[E('p',{},[_('Edit the base mode JSON only. IPv6-block variants are generated automatically.')]),name,ta,E('div',{'class':'right'},[E('button',{'class':'btn','click':ui.hideModal},[_('Cancel')]),' ',E('button',{'class':'btn cbi-button-positive','click':ui.createHandlerFn(this,function(){let obj;try{obj=JSON.parse(ta.value);}catch(e){ui.addNotification(null,E('p',{},[_('Invalid JSON: ')+e.message]),'error');return;}ui.showModal(_('Saving'),[E('p',{'class':'spinning'},[_('Validating…')])]);return run(MGR,['save',m.id,JSON.stringify(obj,null,2)+'\n']).then(L.bind(function(s){if(s.code!==0){ui.hideModal();err(s);return;}return run(MGR,['rename',m.id,(name.value||'').trim()||('Mode '+m.id)]).then(L.bind(function(n){ui.hideModal();if(n.code!==0){err(n);return;}return this.reload();},this));},this));})},[_('Validate & Save')])])]);},this));},
- create(ms){const method=E('select',{'class':'cbi-input-select'},[E('option',{'value':'clone'},[_('Clone existing mode')]),E('option',{'value':'custom'},[_('Custom JSON')])]);const src=E('select',{'class':'cbi-input-select'},ms.map(m=>E('option',{'value':m.id},['Mode '+m.id+' · '+m.name])));const name=E('input',{'class':'cbi-input-text','value':'New Mode'});const ta=E('textarea',{'class':'cbi-input-textarea','style':'width:100%;min-height:360px;font-family:monospace'},['{\n  "log": { "level": "info" },\n  "inbounds": [],\n  "outbounds": []\n}']);ui.showModal(_('Add Mode'),[E('p',{},[_('Clone a working mode, or create one from complete Custom JSON. Protocol-specific templates can be expanded independently without changing the core.')]),method,E('br'),src,E('br'),name,E('br'),ta,E('div',{'class':'right'},[E('button',{'class':'btn','click':ui.hideModal},[_('Cancel')]),' ',E('button',{'class':'btn cbi-button-positive','click':ui.createHandlerFn(this,function(){const nm=(name.value||'').trim()||'New Mode';if(method.value==='clone')return run(MGR,['create',src.value,nm]).then(L.bind(function(r){ui.hideModal();if(r.code!==0){err(r);return;}return this.reload();},this));let obj;try{obj=JSON.parse(ta.value);}catch(e){ui.addNotification(null,E('p',{},[_('Invalid JSON: ')+e.message]),'error');return;}return run(MGR,['create-json',nm,JSON.stringify(obj,null,2)+'\n']).then(L.bind(function(r){ui.hideModal();if(r.code!==0){err(r);return;}return this.reload();},this));})},[_('Create')])])]);},
+ create(ms){
+  const hasModes=ms.length>0;
+  const method=E('select',{'class':'cbi-input-select'},[
+   E('option',{'value':'custom','selected':!hasModes?'selected':null},[_('Custom JSON')]),
+   E('option',{'value':'clone','selected':hasModes?'selected':null,'disabled':!hasModes?'disabled':null},[_('Clone existing mode')])
+  ]);
+  const src=E('select',{'class':'cbi-input-select','disabled':!hasModes?'disabled':null},ms.map(m=>E('option',{'value':m.id},['Mode '+m.id+' · '+m.name])));
+  const id=E('input',{'class':'cbi-input-text','type':'number','min':'1','max':'999','value':hasModes?'':'6','placeholder':'1-999','style':'width:8rem'});
+  const name=E('input',{'class':'cbi-input-text','value':hasModes?'New Mode':'Mode 6','style':'width:100%'});
+  const ta=E('textarea',{'class':'cbi-input-textarea','style':'width:100%;min-height:360px;font-family:monospace'},['{\n  "log": { "level": "info" },\n  "inbounds": [],\n  "outbounds": []\n}']);
+  function sync(){const clone=method.value==='clone';src.disabled=!clone;ta.disabled=clone;}
+  method.addEventListener('change',sync);sync();
+  ui.showModal(_('Add Mode'),[
+   E('p',{},[_('Choose an explicit mode number and create it from complete Custom JSON, or clone an existing working mode.')]),
+   E('label',{},[_('Mode Number')]),E('br'),id,E('br'),
+   E('label',{},[_('Method')]),E('br'),method,E('br'),
+   E('label',{},[_('Source Mode')]),E('br'),src,E('br'),
+   E('label',{},[_('Name')]),E('br'),name,E('br'),
+   E('label',{},[_('JSON')]),E('br'),ta,
+   E('div',{'class':'right'},[
+    E('button',{'class':'btn','click':ui.hideModal},[_('Cancel')]),' ',
+    E('button',{'class':'btn cbi-button-positive','click':ui.createHandlerFn(this,function(){
+     const mid=(id.value||'').trim();
+     if(!/^[1-9][0-9]{0,2}$/.test(mid)||Number(mid)>999){ui.addNotification(null,E('p',{},[_('Mode Number must be between 1 and 999.')]),'error');return;}
+     const nm=(name.value||'').trim()||('Mode '+mid);
+     if(method.value==='clone')return run(MGR,['create-id',mid,src.value,nm]).then(L.bind(function(r){ui.hideModal();if(r.code!==0){err(r);return;}return this.reload();},this));
+     let obj;try{obj=JSON.parse(ta.value);}catch(e){ui.addNotification(null,E('p',{},[_('Invalid JSON: ')+e.message]),'error');return;}
+     return run(MGR,['create-json-id',mid,nm,JSON.stringify(obj,null,2)+'\n']).then(L.bind(function(r){ui.hideModal();if(r.code!==0){err(r);return;}return this.reload();},this));
+    })},[_('Create')])
+   ])
+  ]);
+ },
  render(d){
   const s=d[0].stdout||d[0].stderr||'', ms=modes(d[2].stdout);
   const running=has(s,'运行状态：正常'), ipv6Blocked=has(s,'IPv6 防泄露：已开启'), fwOk=has(s,'IPv6 防火墙：正常'), dnsOk=has(s,'DNS 策略：仅 IPv4'), ruleOk=has(s,'sing-box IPv6 规则：正常');
