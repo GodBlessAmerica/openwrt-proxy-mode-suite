@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=12
+PKG_RELEASE:=13
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
@@ -89,14 +89,15 @@ fi
 if [ -n "$$selected_conffile" ]; then
 	uci set sing-box.main.conffile="$$selected_conffile"
 	uci set sing-box.main.enabled='1'
-	/etc/init.d/sing-box enable >/dev/null 2>&1 || true
 else
 	uci -q delete sing-box.main.conffile || true
 	uci set sing-box.main.enabled='0'
 	/etc/init.d/sing-box stop >/dev/null 2>&1 || true
-	/etc/init.d/sing-box disable >/dev/null 2>&1 || true
 fi
 uci commit sing-box
+# Proxy Mode owns boot sequencing and starts sing-box only after the configured
+# WAN/WWAN is ready. Keep the official init implementation, disable rc.d autostart.
+/etc/init.d/sing-box disable >/dev/null 2>&1 || true
 exit 0
 endef
 
