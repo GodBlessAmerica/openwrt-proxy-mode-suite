@@ -36,8 +36,6 @@ cp "$ROOT/luci-app-proxy-mode/www/luci-static/resources/view/proxy-mode.js" /www
 chmod 755 /usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode
 
 [ -f /etc/config/proxy-mode ] || cp "$ROOT/core/etc/config/proxy-mode" /etc/config/proxy-mode
-# Remove the placeholder registry left by pre-fix development installs only when
-# no real mode1 file exists. User-created entries are otherwise preserved.
 if [ ! -f /etc/sing-box/mode1.json ] && [ "$(uci -q get proxy-mode.mode1.name 2>/dev/null || true)" = "Example Mode 1" ]; then
   uci -q delete proxy-mode.mode1 || true
   uci commit proxy-mode
@@ -79,6 +77,10 @@ else
 fi
 uci commit sing-box
 
+# Proxy Mode owns boot sequencing. The official init script remains intact and is
+# still used for manual start/restart, but is not allowed to start before WAN/WWAN.
+/etc/init.d/sing-box disable >/dev/null 2>&1 || true
+
 rm -f /tmp/luci-indexcache
 rm -rf /tmp/luci-modulecache/* 2>/dev/null || true
 /etc/init.d/rpcd restart
@@ -86,6 +88,7 @@ rm -rf /tmp/luci-modulecache/* 2>/dev/null || true
 
 echo "Installed OpenWrt Proxy Mode Suite."
 echo "Official sing-box service files were preserved."
+echo "Proxy Mode owns sing-box boot sequencing; unconditional sing-box autostart is disabled."
 if [ -n "$SELECTED_CONFIG" ]; then
   echo "Preserved managed mode: $SELECTED_CONFIG"
 else
