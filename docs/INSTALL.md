@@ -1,94 +1,113 @@
 # Installation
 
-## Supported design
-
-OpenWrt Proxy Mode Suite manages sing-box modes and provides a LuCI frontend. It does **not** bundle or replace the official OpenWrt sing-box package.
-
-Reference environment:
+## Reference environment
 
 - OpenWrt 25.12.5
 - target `mediatek/filogic`
 - `aarch64_cortex-a53`
-- apk-tools 3.x
 - RAX3000M reference router
-- sing-box 1.13.x
+- sing-box 1.13.18
 
-Other compatible OpenWrt targets may work, but Release packages are built and validated against the reference SDK above.
+The suite manages the official OpenWrt sing-box package; it does not replace it.
 
 ## Prerequisites
 
-Before installing `proxy-mode-core`, the router should already have:
+Install the official package first:
 
-- OpenWrt
-- official `sing-box` at `/usr/bin/sing-box`
-- `uci`
-- `jsonfilter`
-- TUN/kernel support needed by the selected sing-box configuration
+```sh
+apk update
+apk add sing-box
+```
 
-Before installing `luci-app-proxy-mode`, the router should additionally have:
-
-- LuCI
-- `rpcd`
-- `uhttpd`
+The GUI additionally requires LuCI, `rpcd` and `uhttpd`.
 
 ## Preferred installation: GitHub Release APKs
 
-Download both Release assets plus `SHA256SUMS`:
+For rc3, install:
 
 ```text
-proxy-mode-core-1.0.0-r11.apk
-luci-app-proxy-mode-1.0.0-r6.apk
+proxy-mode-core-1.0.0-r13.apk
+luci-app-proxy-mode-1.0.0-r7.apk
 SHA256SUMS
 ```
 
-Copy the APKs to the router:
+Copy to the router and install:
 
 ```sh
 scp proxy-mode-core-*.apk root@ROUTER_IP:/tmp/
 scp luci-app-proxy-mode-*.apk root@ROUTER_IP:/tmp/
-```
 
-Install them:
-
-```sh
 apk add /tmp/proxy-mode-core-*.apk
 apk add /tmp/luci-app-proxy-mode-*.apk
 ```
 
-If you intentionally install trusted self-built development APKs, OpenWrt may require:
+For trusted self-built development APKs only, OpenWrt may require `--allow-untrusted`.
 
-```sh
-apk add --no-network --allow-untrusted /tmp/proxy-mode-core-*.apk
-apk add --no-network --allow-untrusted /tmp/luci-app-proxy-mode-*.apk
+## Fresh-router behavior
+
+The official sing-box package may create `/etc/sing-box/config.json`; Proxy Mode does not treat that file as a managed mode.
+
+On a fresh router with no valid `/etc/sing-box/modeN.json`:
+
+- Proxy Mode remains unconfigured;
+- `sing-box.main.enabled` remains `0`;
+- no managed mode is invented;
+- unconditional sing-box `rc.d` autostart is disabled;
+- the official `/etc/init.d/sing-box` implementation remains intact.
+
+Typical fresh status:
+
+```text
+当前模式：未配置
+配置文件：未设置
+运行状态：已停止
 ```
 
-Do not use `--allow-untrusted` for arbitrary third-party packages.
+## Add the first mode in LuCI
 
-### OPKG-based OpenWrt
+Open:
 
-For compatible IPK builds:
+**LuCI → Services → Proxy Mode**
 
-```sh
-opkg install ./proxy-mode-core_*.ipk
-opkg install ./luci-app-proxy-mode_*.ipk
+Then:
+
+1. Click **Add Mode**.
+2. Enter a Mode Number from `1` to `999`, for example `6`.
+3. Choose **Custom JSON**.
+4. Enter a name, for example `Mode 6`.
+5. Paste a complete known-good sing-box JSON configuration.
+6. Click **Create**.
+
+The backend validates it with `sing-box check` before creating the mode. A Mode Number of `6` creates:
+
+```text
+/etc/sing-box/mode6.json
 ```
 
-Do not assume a package built for one OpenWrt release/target is appropriate for an unrelated release/target.
+Validate manually if desired:
 
-## Existing router behavior
+```sh
+sing-box check -c /etc/sing-box/mode6.json
+```
 
-The suite is designed to preserve existing production mode files under `/etc/sing-box/`.
+Then switch/start it:
 
-For rc2, package/source reinstall selection is:
+```sh
+proxy-mode 6
+```
 
-1. preserve the valid configuration actually used by a running sing-box process;
-2. otherwise preserve a valid saved `sing-box.main.conffile`;
-3. otherwise, on a fresh installation only, use a valid `/etc/sing-box/mode1.json` if it exists;
-4. if none exists, leave the proxy unconfigured instead of inventing a mode.
+The first activation automatically changes `sing-box.main.enabled` to `1`.
 
-The installer/package does not intentionally replace production `modeN.json` files.
+## Existing-router reinstall behavior
 
-For important routers, keeping your own backup of these files is still recommended:
+The suite preserves production mode files. Selection order is:
+
+1. valid managed configuration used by a running sing-box process;
+2. otherwise a valid saved managed `sing-box.main.conffile`;
+3. otherwise a valid `/etc/sing-box/mode1.json` fallback when present;
+4. otherwise remain unconfigured.
+
+Back up important routers before upgrades:
 
 ```text
 /etc/config/sing-box
@@ -96,33 +115,7 @@ For important routers, keeping your own backup of these files is still recommend
 /etc/sing-box/
 ```
 
-## Fresh router: first mode
-
-The project intentionally ships no real production `mode1.json`, because real sing-box mode files often contain private credentials.
-
-Create your own known-good mode, for example:
-
-```text
-/etc/sing-box/mode1.json
-```
-
-Validate it:
-
-```sh
-sing-box check -c /etc/sing-box/mode1.json
-```
-
-Then start/switch to it:
-
-```sh
-proxy-mode 1
-```
-
-On a completely fresh router with no valid mode file, the suite remains unconfigured until you add one.
-
 ## Source installation from GitHub
-
-For development, recovery, or testing the latest `main` branch:
 
 ```sh
 cd /tmp
@@ -133,25 +126,29 @@ wget -O proxy-mode-suite.tar.gz \
 tar -xzf proxy-mode-suite.tar.gz
 mv openwrt-proxy-mode-suite-main openwrt-proxy-mode-suite
 cd openwrt-proxy-mode-suite
-chmod +x scripts/install.sh
 sh scripts/install.sh
 ```
 
-Important: if the router itself needs the currently running proxy to reach GitHub, download the new source **before** stopping/replacing the old proxy management layer.
+Expected fresh-install output includes:
+
+```text
+Proxy Mode owns sing-box boot sequencing; unconditional sing-box autostart is disabled.
+Fresh install: no managed mode found; Proxy Mode remains unconfigured.
+```
 
 ## Verify after installation
-
-Run:
 
 ```sh
 proxy-mode status
 proxy-mode health
+uci -q show sing-box
 pgrep -af sing-box
+ls -l /etc/rc.d/*sing-box* 2>/dev/null || echo "sing-box rc.d autostart disabled"
 ```
 
-The saved configuration and the `-c` path shown by the running sing-box process should agree.
+On a fresh unconfigured router, there should be no sing-box process and no `Sxxsing-box` rc.d link.
 
-For the GUI:
+If LuCI looks stale after upgrading:
 
 ```sh
 rm -f /tmp/luci-indexcache
@@ -160,25 +157,20 @@ rm -rf /tmp/luci-modulecache/* 2>/dev/null || true
 /etc/init.d/uhttpd restart
 ```
 
-Then open:
-
-**LuCI → Services → Proxy Mode**
-
-If the page still looks old after an upgrade, use `Ctrl+Shift+R` or an incognito/private browser window. Browser-side LuCI JavaScript caching can keep the old page visible even when the router already has the new file.
+Then hard-refresh or use a private/incognito browser window.
 
 ## Boot and WWAN recovery
 
-`proxy-mode-core` installs:
+Set the upstream interface explicitly, for example:
 
-```text
-/usr/bin/proxy-mode                 runtime safety wrapper
-/usr/libexec/proxy-mode-core        mode-management core
-/usr/libexec/proxy-mode-export      export helper
-/usr/libexec/proxy-mode-import      import helper
-/etc/hotplug.d/iface/99-proxy-mode  upstream recovery hook
+```sh
+uci set sing-box.main.ifaces='wwan'
+uci commit sing-box
 ```
 
-When the configured WAN/WWAN becomes ready after boot, the hotplug hook calls recovery logic. Recovery waits for an IPv4 default route before restarting/regenerating the saved mode.
+Proxy Mode deliberately disables unconditional sing-box `rc.d` startup. The selected mode is started by Proxy Mode only after the configured upstream is ready.
+
+When `wwan` emits `ifup`, `/etc/hotplug.d/iface/99-proxy-mode` schedules recovery. Recovery is serialized with a lock so duplicate interface events do not create concurrent restart races. The wrapper waits for interface readiness and an IPv4 default route before restarting the selected mode.
 
 Useful checks:
 
@@ -186,49 +178,31 @@ Useful checks:
 ubus call network.interface.wwan status
 ip -4 route
 proxy-mode status
-nslookup www.google.com 127.0.0.1
+pgrep -af sing-box
+cat /tmp/proxy-mode-recover.log 2>/dev/null
+logread | grep -Ei 'proxy-mode|sing-box|wwan' | tail -100
 ```
 
-A Wi-Fi STA uplink should normally show `up: true`, an IPv4 lease, and a default route before the proxy is considered healthy.
+On the RAX3000M reference setup, multiple enabled 5 GHz STA profiles assigned to the same `wwan` caused availability problems. Keep only the intended uplink enabled unless failover has been explicitly tested.
 
-### Multiple STA profiles on one radio
+## Safe switching
 
-On the RAX3000M reference setup, enabling multiple 5 GHz STA profiles and assigning them to the same `wwan` caused `wwan` to remain unavailable. Keep only the intended uplink enabled during normal operation unless you have explicitly designed and tested failover.
-
-## Safe switching behavior
-
-For numeric mode switches, the runtime wrapper:
+For numeric mode switches, the wrapper:
 
 1. waits for the configured upstream/default route;
-2. validates the candidate sing-box configuration;
-3. synchronizes a simple single-host `route_exclude_address` with the selected mode's first outbound IPv4 server when applicable;
+2. synchronizes a simple host `route_exclude_address` when applicable;
+3. enables sing-box if this is the first managed-mode activation;
 4. starts the candidate mode;
-5. tests local DNS resolution;
-6. restores the previous configuration if the DNS health check fails.
+5. tests local DNS;
+6. restores the previous configuration if the health check fails.
 
-Complex/manual `route_exclude_address` lists are left unchanged rather than rewritten automatically.
-
-## Build locally with the official SDK
-
-Prepare a clean SDK:
+## Build locally
 
 ```sh
-cd openwrt-proxy-mode-suite
 sh scripts/prepare-sdk.sh /path/to/sdk
-```
-
-Build:
-
-```sh
 cd /path/to/sdk
 make package/proxy-mode-suite/proxy-mode-core/compile V=s -j1
 make package/proxy-mode-suite/luci-app-proxy-mode/compile V=s -j1
 ```
 
-For the verified OpenWrt 25.12.5 `mediatek/filogic` SDK, APKs are emitted under a path similar to:
-
-```text
-bin/packages/aarch64_cortex-a53/base/
-```
-
-See [`USAGE.md`](USAGE.md) for day-to-day operation and [`PACKAGING.md`](PACKAGING.md) for build/release details.
+See [`USAGE.md`](USAGE.md) and [`PACKAGING.md`](PACKAGING.md).
