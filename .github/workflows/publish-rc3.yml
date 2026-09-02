@@ -1,0 +1,79 @@
+name: Publish v1.0.0-rc3
+
+on:
+  push:
+    paths:
+      - '.github/RC3_PUBLISH'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified build artifact from run 47
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh run download 33603052154 \
+            --repo "${{ github.repository }}" \
+            --name proxy-mode-25.12.5-mediatek-filogic \
+            --dir dist
+          ls -lah dist
+          cd dist
+          sha256sum -c SHA256SUMS
+          test -f proxy-mode-core-1.0.0-r13.apk
+          test -f luci-app-proxy-mode-1.0.0-r7.apk
+
+      - name: Create prerelease and upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/rc3-notes.md <<'EOF'
+          OpenWrt Proxy Mode Suite v1.0.0-rc3
+
+          Target:
+          - OpenWrt 25.12.5
+          - mediatek/filogic
+          - RAX3000M reference validation
+
+          rc3 highlights:
+          - fixed true fresh-router installation behavior
+          - fresh installs remain unconfigured until a real mode is added
+          - fixed first managed-mode activation when sing-box was previously disabled
+          - LuCI Add Mode now supports explicit numeric Mode IDs
+          - zero-mode LuCI now defaults to Custom JSON
+          - Proxy Mode owns sing-box boot sequencing to avoid startup before WAN/WWAN readiness
+          - improved WWAN hotplug recovery with duplicate-trigger locking
+          - verified recovery when Wi-Fi upstream becomes available after boot
+          - improved IPv6 leak protection status and mode handling
+          - updated installation, usage and packaging documentation
+
+          Packages:
+          - proxy-mode-core-1.0.0-r13.apk
+          - luci-app-proxy-mode-1.0.0-r7.apk
+          - SHA256SUMS
+          EOF
+
+          if gh release view v1.0.0-rc3 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "v1.0.0-rc3 already exists; refusing to overwrite"
+            exit 1
+          fi
+
+          gh release create v1.0.0-rc3 \
+            dist/proxy-mode-core-1.0.0-r13.apk \
+            dist/luci-app-proxy-mode-1.0.0-r7.apk \
+            dist/SHA256SUMS \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "v1.0.0-rc3" \
+            --notes-file /tmp/rc3-notes.md \
+            --prerelease
