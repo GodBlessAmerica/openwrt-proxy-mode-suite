@@ -3,16 +3,36 @@
 [ "$ACTION" = "ifup" ] || exit 0
 [ -n "${INTERFACE:-}" ] || exit 0
 
+# Only recover a managed mode.
+CURRENT="$(uci -q get sing-box.main.conffile 2>/dev/null || true)"
+case "$CURRENT" in
+    /etc/sing-box/mode[0-9]*.json|/etc/sing-box/mode[0-9]*-ipv6-block.json) ;;
+    *) exit 0 ;;
+esac
+
 IFACES="$(uci -q get sing-box.main.ifaces 2>/dev/null || true)"
-for iface in $IFACES; do
-    [ "$iface" = "$INTERFACE" ] || continue
-    logger -t proxy-mode "upstream $INTERFACE is up; scheduling proxy recovery"
-    (
-        sleep 3
-        /usr/bin/proxy-mode recover >/tmp/proxy-mode-recover.log 2>&1 || \
-            logger -t proxy-mode "recovery failed; see /tmp/proxy-mode-recover.log"
-    ) &
-    exit 0
-done
+if [ -n "$IFACES" ]; then
+    MATCH=0
+    for iface in $IFACES; do
+        [ "$iface" = "$INTERFACE" ] && MATCH=1
+    done
+    [ "$MATCH" -eq 1 ] || exit 0
+fi
+
+logger -t proxy-mode "upstream $INTERFACE is up; scheduling proxy recovery"
+(
+    sleep 3
+    LOCK=/tmp/proxy-mode-recover.lock
+    if ! mkdir "$LOCK" 2>/dev/null; then
+        logger -t proxy-mode "recovery already in progress; skipping duplicate trigger"
+        exit 0
+    fi
+    trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+    if /usr/bin/proxy-mode recover >/tmp/proxy-mode-recover.log 2>&1; then
+        logger -t proxy-mode "recovery completed"
+    else
+        logger -t proxy-mode "recovery failed; see /tmp/proxy-mode-recover.log"
+    fi
+) &
 
 exit 0
