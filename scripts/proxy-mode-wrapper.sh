@@ -238,6 +238,20 @@ switch_safely() {
     return 1
 }
 
+# Serialize mode changes with watchdog reconciliation.
+case "${1:-}" in
+    status|health|ipv6-test) ;;
+    *)
+        n=0
+        while ! mkdir /tmp/proxy-mode-switch.lock 2>/dev/null; do
+            n=$((n+1))
+            [ "$n" -lt 30 ] || { echo "Proxy mode busy" >&2; exit 1; }
+            sleep 1
+        done
+        trap 'rmdir /tmp/proxy-mode-switch.lock 2>/dev/null || true' EXIT
+        ;;
+esac
+
 case "${1:-}" in
     ipv6-test)
         exec /usr/libexec/proxy-mode-ipv6-test
@@ -249,7 +263,7 @@ case "${1:-}" in
                 block|allow|status) echo "IPv6 upstream: LAN IPv6 blocked by independent guard; upstream endpoint allowed."; nft list table inet proxy_mode_v6 >/dev/null 2>&1; exit $?;;
             esac
         fi
-        exec "$CORE" "$@"
+        "$CORE" "$@"
         ;;
     status)
         if nft list table inet proxy_mode_v6 >/dev/null 2>&1; then echo "IPv6 upstream guard: active"; fi
@@ -282,7 +296,7 @@ case "${1:-}" in
         "$CORE" "$1"
         ;;
     ''|*[!0-9]*)
-        exec "$CORE" "$@"
+        "$CORE" "$@"
         ;;
     *)
         switch_safely "$1"
