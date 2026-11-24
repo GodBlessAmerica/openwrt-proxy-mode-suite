@@ -16,7 +16,7 @@ define Package/proxy-mode-core
   CATEGORY:=Network
   SUBMENU:=Web Servers/Proxies
   TITLE:=Dynamic sing-box mode manager for OpenWrt
-  DEPENDS:=+jsonfilter +uci
+  DEPENDS:=+jsonfilter +uci +jq +coreutils-stty +nftables
 endef
 
 define Package/proxy-mode-core/description
@@ -42,6 +42,7 @@ define Package/proxy-mode-core/install
 
 	$(INSTALL_DIR) $(1)/usr/libexec
 	$(INSTALL_BIN) $(SUITE_ROOT)/core/usr/bin/proxy-mode $(1)/usr/libexec/proxy-mode-core
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/ipv6-upstream.sh $(1)/usr/libexec/proxy-mode-ipv6-upstream
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/ipv6-upstream-test.sh $(1)/usr/libexec/proxy-mode-ipv6-test
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/export-config.sh $(1)/usr/libexec/proxy-mode-export
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/import-config.sh $(1)/usr/libexec/proxy-mode-import
