@@ -17,6 +17,7 @@ umask 077
 TS="$(date +%Y%m%d-%H%M%S)"
 BACKUP="/root/proxy-mode-suite-backup-$TS"
 mkdir -p "$BACKUP"
+chmod 700 "$BACKUP"
 FILES='/usr/libexec/proxy-mode-ipv6-upstream /usr/libexec/proxy-mode-ipv6-test /usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js /etc/config/proxy-mode'
 for f in $FILES; do
   if [ -e "$f" ]; then mkdir -p "$BACKUP$(dirname "$f")"; cp -p "$f" "$BACKUP$f"; fi
@@ -26,6 +27,7 @@ for f in /etc/config/sing-box; do
 done
 printf '%s\n' "$BACKUP" > /etc/proxy-mode-suite-last-backup
 
+umask 022
 mkdir -p /usr/bin /usr/libexec /etc/hotplug.d/iface /usr/share/luci/menu.d /usr/share/rpcd/acl.d /www/luci-static/resources/view
 cp "$ROOT/scripts/proxy-mode-wrapper.sh" /usr/bin/proxy-mode
 cp "$ROOT/scripts/preflight.sh" /usr/bin/proxy-mode-preflight
@@ -42,6 +44,9 @@ cp "$ROOT/luci-app-proxy-mode/usr/share/luci/menu.d/luci-app-proxy-mode.json" /u
 cp "$ROOT/luci-app-proxy-mode/usr/share/rpcd/acl.d/luci-app-proxy-mode.json" /usr/share/rpcd/acl.d/luci-app-proxy-mode.json
 cp "$ROOT/luci-app-proxy-mode/www/luci-static/resources/view/proxy-mode.js" /www/luci-static/resources/view/proxy-mode.js
 chmod 755 /usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode
+
+chmod 644 /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js
+umask 077
 
 [ -f /etc/config/proxy-mode ] || cp "$ROOT/core/etc/config/proxy-mode" /etc/config/proxy-mode
 if [ ! -f /etc/sing-box/mode1.json ] && [ "$(uci -q get proxy-mode.mode1.name 2>/dev/null || true)" = "Example Mode 1" ]; then
