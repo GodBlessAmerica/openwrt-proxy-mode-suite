@@ -3,6 +3,13 @@
 [ "$ACTION" = "ifup" ] || exit 0
 [ -n "${INTERFACE:-}" ] || exit 0
 
+# IPv6 address acquisition is not a reason to restart an IPv4 TUN.
+# The parent WAN/WWAN event remains responsible for recovery.
+# IPv6-specific lifecycle handling must be implemented before enabling IPv6 modes.
+case "$INTERFACE" in
+    wan6|wwan6) exit 0 ;;
+esac
+
 # Only recover a managed mode.
 CURRENT="$(uci -q get sing-box.main.conffile 2>/dev/null || true)"
 case "$CURRENT" in
