@@ -168,6 +168,9 @@ switch_safely() {
 }
 
 case "${1:-}" in
+    ipv6-test)
+        exec /usr/libexec/proxy-mode-ipv6-test
+        ;;
     status)
         if [ -z "$(uci -q get "$UCI_KEY" 2>/dev/null)" ]; then
             "$CORE" status | sed 's/^当前模式：未知模式$/当前模式：未配置/'
