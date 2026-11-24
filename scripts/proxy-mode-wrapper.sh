@@ -119,7 +119,62 @@ show_health() {
     fi
 }
 
+
+V6=/usr/libexec/proxy-mode-ipv6-upstream
+is_v6_mode() {
+    case "$(jsonfilter -i "$1" -e '@.outbounds[0].server' 2>/dev/null)" in *:*) return 0;; *) return 1;; esac
+}
+v6_apply() {
+    i=0
+    while [ "$i" -lt 15 ]; do
+        "$V6" "$1" apply 2>/dev/null && return 0
+        sleep 1
+        i=$((i+1))
+    done
+    return 1
+}
+v6_clear() {
+    if nft list table inet proxy_mode_v6 >/dev/null 2>&1; then
+        nft delete table inet proxy_mode_v6
+    fi
+}
+v6_restart() {
+    cfg="$1"
+    [ "$(uci -q get sing-box.main.ipv6_mode)" != block ] || {
+        echo "IPv6 upstream requires allow policy; independent LAN IPv6 guard remains active." >&2
+        return 1
+    }
+    sing-box check -c "$cfg" >/dev/null || return 1
+    "$V6" "$cfg" guard || return 1
+    enable_service || return 1
+    uci set "$UCI_KEY=$cfg" && uci commit sing-box || return 1
+    "$SERVICE" restart || return 1
+    v6_apply "$cfg" || return 1
+    sleep 2
+    dns_healthy
+}
+v6_switch() {
+    target="$1"
+    previous="$(uci -q get "$UCI_KEY" 2>/dev/null)"
+    if v6_restart "$target"; then
+        echo "IPv6 upstream started; independent LAN IPv6 guard active."
+        return 0
+    fi
+    echo "IPv6 upstream failed; restoring previous mode." >&2
+    if [ -n "$previous" ] && [ -f "$previous" ] && [ "$previous" != "$target" ]; then
+        if is_v6_mode "$previous"; then
+            v6_restart "$previous" || return 1
+        else
+            uci set "$UCI_KEY=$previous" && uci commit sing-box &&
+            "$SERVICE" restart && sleep 3 && dns_healthy && v6_clear
+        fi
+    fi
+    return 1
+}
+
 recover_current() {
+    active="$(uci -q get "$UCI_KEY" 2>/dev/null)"
+    if is_v6_mode "$active"; then v6_restart "$active"; return $?; fi
     if ! wait_upstream; then
         echo "上游网络在 ${WAIT_SECONDS}s 内未就绪，暂不重启代理。" >&2
         return 1
@@ -141,6 +196,8 @@ recover_current() {
 
 switch_safely() {
     number="$1"
+    target="/etc/sing-box/mode$number.json"
+    if is_v6_mode "$target"; then v6_switch "$target"; return $?; fi
     if ! wait_upstream; then
         echo "错误：上游网络尚未就绪，取消模式切换。" >&2
         return 1
@@ -153,6 +210,7 @@ switch_safely() {
     sleep 2
 
     if dns_healthy; then
+        v6_clear
         return 0
     fi
 
@@ -171,7 +229,13 @@ case "${1:-}" in
     ipv6-test)
         exec /usr/libexec/proxy-mode-ipv6-test
         ;;
+    ipv6)
+        active="$(uci -q get "$UCI_KEY" 2>/dev/null)"
+        if is_v6_mode "$active" && [ "$2" = block ]; then echo "IPv6 upstream already uses independent LAN IPv6 blocking; switch to IPv4 mode before changing policy." >&2; exit 1; fi
+        exec "$CORE" "$@"
+        ;;
     status)
+        if nft list table inet proxy_mode_v6 >/dev/null 2>&1; then echo "IPv6 upstream guard: active"; fi
         if [ -z "$(uci -q get "$UCI_KEY" 2>/dev/null)" ]; then
             "$CORE" status | sed 's/^当前模式：未知模式$/当前模式：未配置/'
         else
@@ -187,6 +251,8 @@ case "${1:-}" in
         recover_current
         ;;
     start|restart)
+        active="$(uci -q get "$UCI_KEY" 2>/dev/null)"
+        if is_v6_mode "$active"; then v6_restart "$active"; exit $?; fi
         if ! wait_upstream; then
             echo "错误：上游网络在 ${WAIT_SECONDS}s 内未就绪。" >&2
             exit 1
