@@ -144,13 +144,27 @@ v6_restart() {
         echo "IPv6 upstream requires allow policy; independent LAN IPv6 guard remains active." >&2
         return 1
     }
+    # IPv4-only TUN must not prefer unreachable IPv6 destinations.
+    if [ "$(jsonfilter -i "$cfg" -e '@.dns.strategy' 2>/dev/null)" != ipv4_only ]; then
+        (
+            umask 077
+            tmp="$(mktemp "$cfg.dns.XXXXXX")" || exit 1
+            trap 'rm -f "$tmp"' EXIT
+            jq '.dns.strategy = "ipv4_only"' "$cfg" > "$tmp" &&
+            sing-box check -c "$tmp" >/dev/null &&
+            cp -p "$cfg" "$cfg.before-ipv6-dns" &&
+            chmod 600 "$cfg.before-ipv6-dns" "$tmp" &&
+            mv "$tmp" "$cfg"
+        ) || return 1
+    fi
     sing-box check -c "$cfg" >/dev/null || return 1
     "$V6" "$cfg" guard || return 1
     enable_service || return 1
     uci set "$UCI_KEY=$cfg" && uci commit sing-box || return 1
     "$SERVICE" restart || return 1
     v6_apply "$cfg" || return 1
-    sleep 2
+    sleep 5
+    "$V6" "$cfg" guard && v6_apply "$cfg" || return 1
     dns_healthy
 }
 v6_switch() {
@@ -218,8 +232,7 @@ switch_safely() {
     if [ -n "$old_config" ] && [ -f "$old_config" ] && [ "$old_config" != "$(uci -q get "$UCI_KEY" 2>/dev/null)" ]; then
         uci set "$UCI_KEY=$old_config"
         uci commit sing-box
-        "$SERVICE" restart
-        sleep 3
+        if is_v6_mode "$old_config"; then v6_restart "$old_config" || return 1; else "$SERVICE" restart; sleep 3; fi
         echo "已恢复原配置：$old_config" >&2
     fi
     return 1
@@ -231,7 +244,11 @@ case "${1:-}" in
         ;;
     ipv6)
         active="$(uci -q get "$UCI_KEY" 2>/dev/null)"
-        if is_v6_mode "$active" && [ "$2" = block ]; then echo "IPv6 upstream already uses independent LAN IPv6 blocking; switch to IPv4 mode before changing policy." >&2; exit 1; fi
+        if is_v6_mode "$active"; then
+            case "${2:-status}" in
+                block|allow|status) echo "IPv6 upstream: LAN IPv6 blocked by independent guard; upstream endpoint allowed."; nft list table inet proxy_mode_v6 >/dev/null 2>&1; exit $?;;
+            esac
+        fi
         exec "$CORE" "$@"
         ;;
     status)
