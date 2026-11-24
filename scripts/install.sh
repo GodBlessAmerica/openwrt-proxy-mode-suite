@@ -13,7 +13,7 @@ command -v jsonfilter >/dev/null 2>&1 || { echo 'ERROR: jsonfilter not found' >&
 TS="$(date +%Y%m%d-%H%M%S)"
 BACKUP="/root/proxy-mode-suite-backup-$TS"
 mkdir -p "$BACKUP"
-FILES='/usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js /etc/config/proxy-mode'
+FILES='/usr/libexec/proxy-mode-ipv6-test /usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js /etc/config/proxy-mode'
 for f in $FILES; do
   if [ -e "$f" ]; then mkdir -p "$BACKUP$(dirname "$f")"; cp -p "$f" "$BACKUP$f"; fi
 done
@@ -25,6 +25,8 @@ printf '%s\n' "$BACKUP" > /etc/proxy-mode-suite-last-backup
 mkdir -p /usr/bin /usr/libexec /etc/hotplug.d/iface /usr/share/luci/menu.d /usr/share/rpcd/acl.d /www/luci-static/resources/view
 cp "$ROOT/scripts/proxy-mode-wrapper.sh" /usr/bin/proxy-mode
 cp "$ROOT/scripts/preflight.sh" /usr/bin/proxy-mode-preflight
+cp "$ROOT/scripts/ipv6-upstream-test.sh" /usr/libexec/proxy-mode-ipv6-test
+chmod 755 /usr/libexec/proxy-mode-ipv6-test
 cp "$ROOT/core/usr/bin/proxy-mode" /usr/libexec/proxy-mode-core
 cp "$ROOT/scripts/export-config.sh" /usr/libexec/proxy-mode-export
 cp "$ROOT/scripts/import-config.sh" /usr/libexec/proxy-mode-import
