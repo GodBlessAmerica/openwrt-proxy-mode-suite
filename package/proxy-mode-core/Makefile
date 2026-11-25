@@ -1,8 +1,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
-PKG_VERSION:=1.0.0
-PKG_RELEASE:=14
+PKG_VERSION:=1.1.0
+PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
