@@ -10,10 +10,15 @@ command -v jsonfilter >/dev/null 2>&1 || { echo 'ERROR: jsonfilter not found' >&
 [ -f /etc/config/sing-box ] || { echo 'ERROR: official /etc/config/sing-box not found' >&2; exit 1; }
 [ -d /usr/share/luci ] || { echo 'ERROR: LuCI not installed' >&2; exit 1; }
 
+for dep in jq nft; do
+  command -v "$dep" >/dev/null 2>&1 || { echo "ERROR: missing dependency $dep" >&2; exit 1; }
+done
+umask 077
 TS="$(date +%Y%m%d-%H%M%S)"
 BACKUP="/root/proxy-mode-suite-backup-$TS"
 mkdir -p "$BACKUP"
-FILES='/usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js /etc/config/proxy-mode'
+chmod 700 "$BACKUP"
+FILES='/etc/init.d/proxy-mode-watchdog /usr/libexec/proxy-mode-ipv6-watchdog /usr/libexec/proxy-mode-ipv6-upstream /usr/libexec/proxy-mode-ipv6-test /usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js /etc/config/proxy-mode'
 for f in $FILES; do
   if [ -e "$f" ]; then mkdir -p "$BACKUP$(dirname "$f")"; cp -p "$f" "$BACKUP$f"; fi
 done
@@ -22,9 +27,17 @@ for f in /etc/config/sing-box; do
 done
 printf '%s\n' "$BACKUP" > /etc/proxy-mode-suite-last-backup
 
+umask 022
 mkdir -p /usr/bin /usr/libexec /etc/hotplug.d/iface /usr/share/luci/menu.d /usr/share/rpcd/acl.d /www/luci-static/resources/view
 cp "$ROOT/scripts/proxy-mode-wrapper.sh" /usr/bin/proxy-mode
 cp "$ROOT/scripts/preflight.sh" /usr/bin/proxy-mode-preflight
+cp "$ROOT/scripts/ipv6-watchdog.sh" /usr/libexec/proxy-mode-ipv6-watchdog
+cp "$ROOT/scripts/proxy-mode-watchdog.init" /etc/init.d/proxy-mode-watchdog
+chmod 755 /usr/libexec/proxy-mode-ipv6-watchdog /etc/init.d/proxy-mode-watchdog
+cp "$ROOT/scripts/ipv6-upstream.sh" /usr/libexec/proxy-mode-ipv6-upstream
+chmod 755 /usr/libexec/proxy-mode-ipv6-upstream
+cp "$ROOT/scripts/ipv6-upstream-test.sh" /usr/libexec/proxy-mode-ipv6-test
+chmod 755 /usr/libexec/proxy-mode-ipv6-test
 cp "$ROOT/core/usr/bin/proxy-mode" /usr/libexec/proxy-mode-core
 cp "$ROOT/scripts/export-config.sh" /usr/libexec/proxy-mode-export
 cp "$ROOT/scripts/import-config.sh" /usr/libexec/proxy-mode-import
@@ -34,6 +47,9 @@ cp "$ROOT/luci-app-proxy-mode/usr/share/luci/menu.d/luci-app-proxy-mode.json" /u
 cp "$ROOT/luci-app-proxy-mode/usr/share/rpcd/acl.d/luci-app-proxy-mode.json" /usr/share/rpcd/acl.d/luci-app-proxy-mode.json
 cp "$ROOT/luci-app-proxy-mode/www/luci-static/resources/view/proxy-mode.js" /www/luci-static/resources/view/proxy-mode.js
 chmod 755 /usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode
+
+chmod 644 /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js
+umask 077
 
 [ -f /etc/config/proxy-mode ] || cp "$ROOT/core/etc/config/proxy-mode" /etc/config/proxy-mode
 if [ ! -f /etc/sing-box/mode1.json ] && [ "$(uci -q get proxy-mode.mode1.name 2>/dev/null || true)" = "Example Mode 1" ]; then
@@ -85,6 +101,9 @@ rm -f /tmp/luci-indexcache
 rm -rf /tmp/luci-modulecache/* 2>/dev/null || true
 /etc/init.d/rpcd restart
 /etc/init.d/uhttpd restart
+
+/etc/init.d/proxy-mode-watchdog enable
+/etc/init.d/proxy-mode-watchdog restart
 
 echo "Installed OpenWrt Proxy Mode Suite."
 echo "Official sing-box service files were preserved."

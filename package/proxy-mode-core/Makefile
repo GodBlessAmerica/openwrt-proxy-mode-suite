@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=proxy-mode-core
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=13
+PKG_RELEASE:=14
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=GodBlessAmerica
 PKGARCH:=all
@@ -16,7 +16,7 @@ define Package/proxy-mode-core
   CATEGORY:=Network
   SUBMENU:=Web Servers/Proxies
   TITLE:=Dynamic sing-box mode manager for OpenWrt
-  DEPENDS:=+jsonfilter +uci
+  DEPENDS:=+jsonfilter +uci +jq +coreutils-stty +nftables
 endef
 
 define Package/proxy-mode-core/description
@@ -42,8 +42,14 @@ define Package/proxy-mode-core/install
 
 	$(INSTALL_DIR) $(1)/usr/libexec
 	$(INSTALL_BIN) $(SUITE_ROOT)/core/usr/bin/proxy-mode $(1)/usr/libexec/proxy-mode-core
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/ipv6-upstream.sh $(1)/usr/libexec/proxy-mode-ipv6-upstream
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/ipv6-upstream-test.sh $(1)/usr/libexec/proxy-mode-ipv6-test
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/export-config.sh $(1)/usr/libexec/proxy-mode-export
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/import-config.sh $(1)/usr/libexec/proxy-mode-import
+
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/ipv6-watchdog.sh $(1)/usr/libexec/proxy-mode-ipv6-watchdog
+	$(INSTALL_DIR) $(1)/etc/init.d
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/proxy-mode-watchdog.init $(1)/etc/init.d/proxy-mode-watchdog
 
 	$(INSTALL_DIR) $(1)/etc/hotplug.d/iface
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/99-proxy-mode $(1)/etc/hotplug.d/iface/99-proxy-mode
@@ -98,6 +104,8 @@ uci commit sing-box
 # Proxy Mode owns boot sequencing and starts sing-box only after the configured
 # WAN/WWAN is ready. Keep the official init implementation, disable rc.d autostart.
 /etc/init.d/sing-box disable >/dev/null 2>&1 || true
+/etc/init.d/proxy-mode-watchdog enable
+/etc/init.d/proxy-mode-watchdog restart
 exit 0
 endef
 

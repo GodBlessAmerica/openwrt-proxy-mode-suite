@@ -10,11 +10,18 @@ case "$CURRENT" in
     *) exit 0 ;;
 esac
 
+case "$INTERFACE" in
+    wan6|wwan6)
+        case "$(jsonfilter -i "$CURRENT" -e '@.outbounds[0].server' 2>/dev/null)" in *:*) ;; *) exit 0;; esac
+        ;;
+esac
+
 IFACES="$(uci -q get sing-box.main.ifaces 2>/dev/null || true)"
 if [ -n "$IFACES" ]; then
     MATCH=0
     for iface in $IFACES; do
         [ "$iface" = "$INTERFACE" ] && MATCH=1
+        [ "${iface}6" = "$INTERFACE" ] && MATCH=1
     done
     [ "$MATCH" -eq 1 ] || exit 0
 fi

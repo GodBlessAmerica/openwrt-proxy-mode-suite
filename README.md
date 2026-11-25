@@ -4,6 +4,10 @@ Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 
 
 > Current version: **v1.0.0-rc3**. Reference validation: OpenWrt 25.12.5 on `mediatek/filogic` with a CMCC RAX3000M and sing-box 1.13.18.
 
+## IPv6 upstream preview (source installation only)
+
+This development branch contains the complete rc3 suite plus an experimental, reversible IPv6 VLESS Reality TUN test. It is not a stable release. Install the full source tree with `sh scripts/install.sh`, install `jq` with apk, and run `proxy-mode ipv6-test` interactively. The router must already have a usable IPv6 WAN/WWAN route, an active IPv4-only auto-redirect TUN mode with a tagged first outbound, and existing IPv6 policy set to allow. The test installs a separate IPv6 forwarding/output guard before stopping the normal service; it does not change the original mode JSON or UCI settings. Paste the VLESS URI locally at the hidden prompt. Keep SSH open, test from a LAN client, and press Enter to restore the original service. Do not switch modes, reboot, or change networking during the test. If restoration fails, the guard is retained; inspect the service locally before removing it. The preview does not yet implement persistent IPv6 mode switching, automatic WAN6 provisioning, or reboot recovery. No production credentials belong in the repository.
+
 ## Quick Start
 
 Install the official OpenWrt sing-box package first:
