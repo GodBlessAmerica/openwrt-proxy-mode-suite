@@ -50,6 +50,9 @@ jobs:
           echo "CORE_PACKAGE=proxy-mode-core-${CORE_VERSION}-r${CORE_RELEASE}.apk" >> "$GITHUB_ENV"
           echo "LUCI_PACKAGE=luci-app-proxy-mode-${LUCI_VERSION}-r${LUCI_RELEASE}.apk" >> "$GITHUB_ENV"
 
+      - name: Validate source scripts
+        run: |
+          for f in install.sh scripts/*.sh scripts/99-proxy-mode scripts/proxy-mode-watchdog.init core/usr/bin/proxy-mode luci-app-proxy-mode/usr/libexec/proxy-mode-ui; do sh -n "$f" || exit 1; done
       - name: Install host dependencies
         run: |
           sudo apt-get update
@@ -101,7 +104,7 @@ jobs:
           find dist -type f -name 'luci-app-proxy-mode-*.apk' ! -name "$LUCI_PACKAGE" -delete
 
           (cd dist && sha256sum "$CORE_PACKAGE" "$LUCI_PACKAGE" > SHA256SUMS)
-          sha256sum -c dist/SHA256SUMS --ignore-missing
+          (cd dist && sha256sum -c SHA256SUMS)
           ls -lah dist
 
       - name: Upload Actions artifact
@@ -128,7 +131,7 @@ jobs:
           - ${LUCI_PACKAGE}
           - SHA256SUMS
 
-          Highlights include safe sing-box mode management, IPv6 leak protection, upstream recovery and the LuCI dashboard.
+          Includes IPv6 VLESS upstream guard and watchdog, existing IPv4 mode management and LuCI. Candidate; full hardware regression and fresh installation remain pending.
 
           Documentation:
           - README.md
