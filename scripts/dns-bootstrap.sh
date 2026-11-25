@@ -1,5 +1,5 @@
 #!/bin/sh
-# Normalize only simple IPv4-domain VLESS profiles with one proxied DoH.
+# Normalize only simple single-hop or two-hop IPv4-domain VLESS profiles with one proxied DoH.
 # No network requests; no credentials printed. Input/output are local files.
 set -eu
 umask 077
@@ -9,16 +9,23 @@ trap 'rm -f "$t"' EXIT
 jq '
   def eligible:
     (.outbounds | type == "array") and
-    ([.outbounds[] | select(.type == "vless")] | length == 1) and
+    ([.outbounds[] | select(.type == "vless")] | length) as $n |
+    ($n == 1 or $n == 2) and
     (.outbounds[0] | .type == "vless" and (.detour // "") == "" and
       (.domain_resolver == null) and (.server | type == "string" and
         test("^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$") and
         (test("^[0-9.]+$") | not))) and
-    (.route.final == .outbounds[0].tag) and
+    (.outbounds[0].tag) as $a |
+    (.route.final) as $final |
+    ($a != null and $final != null) and
+    (if $n == 1 then $final == $a else
+      $final != $a and
+      ([.outbounds[] | select(.type == "vless" and .tag == $final and .detour == $a)] | length == 1)
+    end) and
     (.route.default_domain_resolver == null) and
     (.dns.servers | type == "array" and length == 1) and
     (.dns.servers[0].type == "https") and
-    (.dns.servers[0].detour == .outbounds[0].tag) and
+    (.dns.servers[0].detour == .route.final) and
     (.dns.servers[0].tag != "dns-bootstrap") and
     ((.dns.final // .dns.servers[0].tag) == .dns.servers[0].tag) and
     ((.dns.rules // []) | length == 0) and
