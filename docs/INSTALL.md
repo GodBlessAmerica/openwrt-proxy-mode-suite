@@ -10,16 +10,16 @@
 
 The suite manages the official OpenWrt sing-box package; it does not replace it.
 
-## Prerequisites
+## Unified source install or upgrade (v1.1.0 candidate)
 
-Install the official package first:
+Run as root over trusted LAN SSH, after reviewing the downloaded script:
 
 ```sh
-apk update
-apk add sing-box
+curl -fL -o /tmp/proxy-mode-install.sh https://raw.githubusercontent.com/GodBlessAmerica/openwrt-proxy-mode-suite/main/install.sh
+sh /tmp/proxy-mode-install.sh
 ```
 
-The GUI additionally requires LuCI, `rpcd` and `uhttpd`.
+The entry installs missing official dependencies and then runs the full suite installer. Existing private profiles remain in place; fresh systems without a managed mode remain unconfigured. The source installer records component backups at /root/proxy-mode-suite-backup-*; these are private and are not a fully tested automatic rollback. Do not upload them. A working WAN/WWAN IPv6 route is required for IPv6 upstream. Fresh installation and reboot/reconnect validation for this candidate remain pending.
 
 ## Optional: change the LAN subnet
 
@@ -44,7 +44,7 @@ Choose a LAN subnet that does not overlap the upstream network. For example, if 
 
 You can also change the LAN address from LuCI under **Network → Interfaces → LAN**.
 
-## Preferred installation: GitHub Release APKs
+## Historical rc3 installation: GitHub Release APKs
 
 For rc3, install:
 
