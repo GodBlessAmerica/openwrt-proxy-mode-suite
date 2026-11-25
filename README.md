@@ -2,74 +2,24 @@
 
 Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 leak protection, safe validation/rollback, upstream recovery, migration tools and reproducible OpenWrt package builds.
 
-> Current version: **v1.0.0-rc3**. Reference validation: OpenWrt 25.12.5 on `mediatek/filogic` with a CMCC RAX3000M and sing-box 1.13.18.
+> Current version: **v1.1.0 release candidate**. Reference environment: OpenWrt 25.12.5 on mediatek/filogic (RAX3000M), sing-box 1.13.18. The operator confirmed basic IPv6 upstream operation. Full IPv4 regression, UDP end-to-end, reboot/reconnect and leak testing remain pending.
 
-## IPv6 upstream preview (source installation only)
+## 一键安装 / 升级
 
-This development branch contains the complete rc3 suite plus an experimental, reversible IPv6 VLESS Reality TUN test. It is not a stable release. Install the full source tree with `sh scripts/install.sh`, install `jq` with apk, and run `proxy-mode ipv6-test` interactively. The router must already have a usable IPv6 WAN/WWAN route, an active IPv4-only auto-redirect TUN mode with a tagged first outbound, and existing IPv6 policy set to allow. The test installs a separate IPv6 forwarding/output guard before stopping the normal service; it does not change the original mode JSON or UCI settings. Paste the VLESS URI locally at the hidden prompt. Keep SSH open, test from a LAN client, and press Enter to restore the original service. Do not switch modes, reboot, or change networking during the test. If restoration fails, the guard is retained; inspect the service locally before removing it. The preview does not yet implement persistent IPv6 mode switching, automatic WAN6 provisioning, or reboot recovery. No production credentials belong in the repository.
-
-## Quick Start
-
-Install the official OpenWrt sing-box package first:
+For an existing compatible installation or a fresh APK-based OpenWrt router, connect by trusted LAN SSH as root, review the installer, and run:
 
 ```sh
-apk update
-apk add sing-box
+curl -fL -o /tmp/proxy-mode-install.sh https://raw.githubusercontent.com/GodBlessAmerica/openwrt-proxy-mode-suite/main/install.sh
+sh /tmp/proxy-mode-install.sh
 ```
 
-Download the current rc3 Release packages:
+The source installer installs missing official dependencies (including sing-box and LuCI), backs up existing suite files, preserves existing mode JSON and settings, and installs the IPv6 guard and watchdog. It does not flash firmware. Existing managed modes are preserved; a fresh installation without a managed mode stays unconfigured. RPC/LuCI services are restarted; keep LAN SSH available. This unified source entry point has not yet received separate fresh-device verification. Do not mix source upgrades with APK package management without considering file ownership.
 
-```sh
-cd /tmp
-wget -4 -T 60 -O proxy-mode-core-1.0.0-r13.apk \
-  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/proxy-mode-core-1.0.0-r13.apk
-wget -4 -T 60 -O luci-app-proxy-mode-1.0.0-r7.apk \
-  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/luci-app-proxy-mode-1.0.0-r7.apk
-wget -4 -T 60 -O SHA256SUMS \
-  https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.0.0-rc3/SHA256SUMS
-sha256sum -c SHA256SUMS
-```
+For reproducible APKs, see the [v1.1.0 candidate release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.0) when its build has published. Verify SHA256SUMS before installing; the official sing-box package must be installed first.
 
-`-4` forces IPv4 and `-T 60` gives GitHub/Release CDN connections more time on routers with slow or inconsistent HTTPS setup. If a first download attempt times out, retry the same command.
+## IPv6 upstream
 
-Install the verified packages:
-
-```sh
-apk add --allow-untrusted /tmp/proxy-mode-core-1.0.0-r13.apk
-apk add --allow-untrusted /tmp/luci-app-proxy-mode-1.0.0-r7.apk
-```
-
-`--allow-untrusted` is required because the Release APKs are not signed by an OpenWrt repository key. Only use it for packages downloaded from this project's Release page and verified with `SHA256SUMS`.
-
-Verify:
-
-```sh
-proxy-mode status
-```
-
-Then open:
-
-**LuCI → Services → Proxy Mode**
-
-On a fresh router, click **Add Mode**, enter a Mode Number such as `6`, choose **Custom JSON**, paste a complete known-good sing-box configuration, create it, then switch to it.
-
-CLI example:
-
-```sh
-sing-box check -c /etc/sing-box/mode6.json
-proxy-mode 6
-```
-
-Optional: you may change the router LAN subnet before or after installation. This is not required by Proxy Mode. For example, to use `10.88.0.1/24`:
-
-```sh
-uci set network.lan.ipaddr='10.88.0.1'
-uci set network.lan.netmask='255.255.255.0'
-uci commit network
-/etc/init.d/network restart
-```
-
-Changing the LAN address disconnects the current SSH/LuCI session. Reconnect using the new address, for example `10.88.0.1`. Choose a subnet that does not conflict with the upstream network. See `docs/INSTALL.md` for more detail.
+A supported profile has a literal IPv6 VLESS first outbound and an IPv4-only TUN with auto_route and auto_redirect enabled. The router must already have a working IPv6 WAN/WWAN route; this suite does not provision WAN6. The IPv6 upstream path sets DNS strategy to ipv4_only if needed, installs an independent IPv6 guard, permits the configured upstream TCP endpoint, and reconciles missing sing-box nftables exceptions using a watchdog. This is not dual-stack LAN interception. Existing IPv4 profiles retain the original switching path. Use the existing allow policy for this IPv6 upstream mode; the independent guard still blocks forwarded IPv6. The temporary interactive ipv6-test command is intended for diagnostics, not ordinary mode switching.
 
 ## Highlights
 
@@ -231,7 +181,7 @@ cd openwrt-proxy-mode-suite
 sh scripts/install.sh
 ```
 
-For normal users, the tested Release APKs are preferred over `main` source installation.
+The unified source installer above is the current source installation entry; historical rc3 APKs remain available for recovery.
 
 ## Common commands
 
