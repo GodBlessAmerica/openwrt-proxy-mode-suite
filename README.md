@@ -2,7 +2,7 @@
 
 Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 leak protection, safe validation/rollback, upstream recovery, migration tools and reproducible OpenWrt package builds.
 
-> Current version: **v1.1.0 release candidate**. Reference environment: OpenWrt 25.12.5 on mediatek/filogic (RAX3000M), sing-box 1.13.18. The operator confirmed basic IPv6 upstream operation. Full IPv4 regression, UDP end-to-end, reboot/reconnect and leak testing remain pending.
+> Current version: **v1.1.1 release candidate**. Reference environment: OpenWrt 25.12.5 on mediatek/filogic (RAX3000M), sing-box 1.13.18. The operator confirmed basic IPv6 upstream operation and working hostname-based A-B proxy operation on the RAX3000M. v1.1.1 adds independent bootstrap DNS for eligible single-hop and two-hop IPv4 hostname VLESS profiles, including legacy mode migration and compatibility with jq builds without Oniguruma. Full IPv4 regression, UDP end-to-end, reboot/reconnect and leak testing remain pending.
 
 ## 一键安装 / 升级
 
@@ -15,7 +15,7 @@ sh /tmp/proxy-mode-install.sh
 
 The source installer installs missing official dependencies (including sing-box and LuCI), backs up existing suite files, preserves existing mode JSON and settings, and installs the IPv6 guard and watchdog. It does not flash firmware. Existing managed modes are preserved; a fresh installation without a managed mode stays unconfigured. RPC/LuCI services are restarted; keep LAN SSH available. This unified source entry point has not yet received separate fresh-device verification. Do not mix source upgrades with APK package management without considering file ownership.
 
-For reproducible APKs, see the [v1.1.0 candidate release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.0) when its build has published. Verify SHA256SUMS before installing; the official sing-box package must be installed first.
+For reproducible APKs, see the [v1.1.1 candidate release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.1) when its build has published. Verify SHA256SUMS before installing; the official sing-box package must be installed first.
 
 ## IPv6 upstream
 
