@@ -21,6 +21,31 @@ sh /tmp/proxy-mode-install.sh
 
 The entry installs missing official dependencies and then runs the full suite installer. Existing private profiles remain in place; fresh systems without a managed mode remain unconfigured. The source installer records component backups at /root/proxy-mode-suite-backup-*; these are private and are not a fully tested automatic rollback. Do not upload them. A working WAN/WWAN IPv6 route is required for IPv6 upstream. Fresh installation and reboot/reconnect validation for this candidate remain pending.
 
+## Current v1.1.1 APK installation (alternative to source installation)
+
+For OpenWrt 25.12.5 mediatek/filogic with official sing-box and LuCI already installed, download the two exact packages and manifest from the [v1.1.1 release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.1). Use a trusted LAN SSH session; back up private profiles first. Do not mix source-managed and APK-managed files without checking ownership.
+
+```sh
+(
+set -e
+D=$(mktemp -d /tmp/proxy-apk.XXXXXX)
+cd "$D"
+BASE=https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.1.1
+for f in proxy-mode-core-1.1.1-r1.apk luci-app-proxy-mode-1.1.1-r1.apk SHA256SUMS; do
+  wget -4 -T 60 -O "$f" "$BASE/$f"
+done
+sha256sum -c SHA256SUMS
+apk add --allow-untrusted ./proxy-mode-core-1.1.1-r1.apk ./luci-app-proxy-mode-1.1.1-r1.apk
+proxy-mode status
+)
+```
+
+The APKs are not signed by an official OpenWrt repository key. Check the manifest before installing. Full clean-install and reboot regression remain pending.
+
+## Automatic DNS bootstrap (v1.1.1)
+
+For eligible single-hop or A-B VLESS configurations with an IPv4-resolvable first-hop hostname, one proxied HTTPS DNS server and no custom resolver/rules, the suite adds direct AliDNS HTTPS bootstrap (223.5.5.5, TLS dns.alidns.com), sets the first-hop and default domain resolvers, and keeps ordinary DNS on the existing proxied DoH. A-B detour is preserved. New/edited profiles and legacy modes prepared during switching/start/restart/recovery are normalized. A singleton IPv4 /32 TUN exclusion is treated as legacy and removed on eligible profiles; multiple exclusions are preserved. Literal addresses and custom resolvers are not automatically rewritten. AAAA-only first-hop hostnames are not supported by this normalization. Bootstrap and other default-resolver lookups can leave directly; this is not a zero-leak guarantee. Configuration validation and offline regression are not substitutes for device testing.
+
 ## Optional: change the LAN subnet
 
 Proxy Mode does not require a specific LAN address. Change it only if you want a different local subnet or need to avoid a conflict with the upstream network.
@@ -204,6 +229,7 @@ wget -4 -T 60 -O proxy-mode-suite.tar.gz \
 tar -xzf proxy-mode-suite.tar.gz
 mv openwrt-proxy-mode-suite-main openwrt-proxy-mode-suite
 cd openwrt-proxy-mode-suite
+sh scripts/test-dns-bootstrap.sh
 sh scripts/install.sh
 ```
 
@@ -214,7 +240,7 @@ Proxy Mode owns sing-box boot sequencing; unconditional sing-box autostart is di
 Fresh install: no managed mode found; Proxy Mode remains unconfigured.
 ```
 
-For ordinary users, the tested Release APKs are preferred over installing the latest `main` source.
+Use the current release APKs for package-managed installations and the source installer for source-managed installations. Historical rc3 instructions are for recovery only.
 
 ## Verify after installation
 
