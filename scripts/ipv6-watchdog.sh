@@ -8,6 +8,16 @@ while :; do
     cfg="$(uci -q get sing-box.main.conffile 2>/dev/null)"
     case "$cfg" in /etc/sing-box/mode[0-9]*.json) ;; *) cfg='';; esac
     if [ -n "$cfg" ] && [ "$(uci -q get sing-box.main.enabled)" = 1 ] &&
+        [ ! -d /tmp/proxy-mode-recover.lock ] &&
+        pgrep -af "^/usr/bin/sing-box run " | grep -F -- " -c $cfg " >/dev/null 2>&1; then
+        if mkdir /tmp/proxy-mode-switch.lock 2>/dev/null; then
+            if [ "$(uci -q get sing-box.main.conffile)" = "$cfg" ]; then
+                "$HELPER" bootstrap >/dev/null 2>&1 || true
+            fi
+            rmdir /tmp/proxy-mode-switch.lock
+        fi
+    fi
+    if [ -n "$cfg" ] && [ "$(uci -q get sing-box.main.enabled)" = 1 ] &&
         [ "$(jsonfilter -i "$cfg" -e '@.outbounds[0].type' 2>/dev/null)" = vless ]; then
         case "$(jsonfilter -i "$cfg" -e '@.outbounds[0].server' 2>/dev/null)" in
             *:*)
