@@ -13,9 +13,11 @@ command -v jsonfilter >/dev/null 2>&1 || { echo 'ERROR: jsonfilter not found' >&
 for dep in jq nft; do
   command -v "$dep" >/dev/null 2>&1 || { echo "ERROR: missing dependency $dep" >&2; exit 1; }
 done
+[ "$(id -u)" = 0 ] || { echo 'Root required' >&2; exit 1; }
+for f in "$ROOT"/scripts/*.sh "$ROOT/scripts/99-proxy-mode" "$ROOT/scripts/proxy-mode-watchdog.init" "$ROOT/core/usr/bin/proxy-mode" "$ROOT/luci-app-proxy-mode/usr/libexec/proxy-mode-ui"; do sh -n "$f"; done
 umask 077
 TS="$(date +%Y%m%d-%H%M%S)"
-BACKUP="/root/proxy-mode-suite-backup-$TS"
+BACKUP="/root/proxy-mode-suite-backup-$TS-$"
 mkdir -p "$BACKUP"
 chmod 700 "$BACKUP"
 FILES='/usr/libexec/proxy-mode-dns-bootstrap /etc/init.d/proxy-mode-watchdog /usr/libexec/proxy-mode-ipv6-watchdog /usr/libexec/proxy-mode-ipv6-upstream /usr/libexec/proxy-mode-ipv6-test /usr/bin/proxy-mode /usr/bin/proxy-mode-preflight /usr/libexec/proxy-mode-core /usr/libexec/proxy-mode-export /usr/libexec/proxy-mode-import /usr/libexec/proxy-mode-ui /etc/hotplug.d/iface/99-proxy-mode /usr/share/luci/menu.d/luci-app-proxy-mode.json /usr/share/rpcd/acl.d/luci-app-proxy-mode.json /www/luci-static/resources/view/proxy-mode.js /etc/config/proxy-mode'
@@ -107,7 +109,7 @@ rm -rf /tmp/luci-modulecache/* 2>/dev/null || true
 /etc/init.d/proxy-mode-watchdog enable
 /etc/init.d/proxy-mode-watchdog restart
 
-echo "Installed OpenWrt Proxy Mode Suite."
+echo "Installed OpenWrt Proxy Mode Suite $(cat "$ROOT/VERSION")."
 echo "Official sing-box service files were preserved."
 echo "Proxy Mode owns sing-box boot sequencing; unconditional sing-box autostart is disabled."
 if [ -n "$SELECTED_CONFIG" ]; then
