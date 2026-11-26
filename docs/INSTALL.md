@@ -10,7 +10,7 @@
 
 The suite manages the official OpenWrt sing-box package; it does not replace it.
 
-## Unified source install or upgrade (v1.1.0 candidate)
+## Unified source install or upgrade (v1.1.1 candidate)
 
 Run as root over trusted LAN SSH, after reviewing the downloaded script:
 
