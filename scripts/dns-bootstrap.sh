@@ -37,11 +37,15 @@ jq '
     .outbounds[0].domain_resolver = {"server":"dns-bootstrap","strategy":"ipv4_only"} |
     .route.default_domain_resolver = {"server":"dns-bootstrap","strategy":"ipv4_only"} |
     .inbounds |= map(if .type == "tun" and .auto_route == true and
-      ((.route_exclude_address // []) | length == 1 and (.[0] | type == "string" and test("^[0-9]+\\\\.[0-9]+\\\\.[0-9]+\\\\.[0-9]+/32$")))
+      ((.route_exclude_address // []) | length == 1 and (.[0] | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/32$")))
       then del(.route_exclude_address) else . end)
   else . end
 ' "$f" > "$t"
 # Preserve the original bytes when no semantic change was needed.
 if jq -e --slurp '.[0] == .[1]' "$f" "$t" >/dev/null; then exit 0; fi
 sing-box check -c "$t" >/dev/null || exit 1
+if [ "${2:-}" = "--backup" ]; then
+    backup="$(mktemp "$f.before-bootstrap.XXXXXX")"
+    cp "$f" "$backup" || exit 1
+fi
 mv "$t" "$f"
