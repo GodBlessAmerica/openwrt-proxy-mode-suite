@@ -10,7 +10,7 @@
 
 The suite manages the official OpenWrt sing-box package; it does not replace it.
 
-## Unified source install or upgrade (v1.1.1 candidate)
+## Unified source install or upgrade (v1.1.2 candidate)
 
 Run as root over trusted LAN SSH, after reviewing the downloaded script:
 
@@ -21,30 +21,69 @@ sh /tmp/proxy-mode-install.sh
 
 The entry installs missing official dependencies and then runs the full suite installer. Existing private profiles remain in place; fresh systems without a managed mode remain unconfigured. The source installer records component backups at /root/proxy-mode-suite-backup-*; these are private and are not a fully tested automatic rollback. Do not upload them. A working WAN/WWAN IPv6 route is required for IPv6 upstream. Fresh installation and reboot/reconnect validation for this candidate remain pending.
 
-## Current v1.1.1 APK installation (alternative to source installation)
+## Current v1.1.2 APK installation (alternative to source installation)
 
-For OpenWrt 25.12.5 mediatek/filogic with official sing-box and LuCI already installed, download the two exact packages and manifest from the [v1.1.1 release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.1). Use a trusted LAN SSH session; back up private profiles first. Do not mix source-managed and APK-managed files without checking ownership.
+For OpenWrt 25.12.5 mediatek/filogic with official sing-box and LuCI already installed, download the two exact packages and manifest from the [v1.1.2 release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.2). Use a trusted LAN SSH session; back up private profiles first. Do not mix source-managed and APK-managed files without checking ownership.
 
 ```sh
 (
 set -e
 D=$(mktemp -d /tmp/proxy-apk.XXXXXX)
 cd "$D"
-BASE=https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.1.1
-for f in proxy-mode-core-1.1.1-r1.apk luci-app-proxy-mode-1.1.1-r1.apk SHA256SUMS; do
+BASE=https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/download/v1.1.2
+for f in proxy-mode-core-1.1.2-r1.apk luci-app-proxy-mode-1.1.2-r1.apk SHA256SUMS; do
   wget -4 -T 60 -O "$f" "$BASE/$f"
 done
 sha256sum -c SHA256SUMS
-apk add --allow-untrusted ./proxy-mode-core-1.1.1-r1.apk ./luci-app-proxy-mode-1.1.1-r1.apk
+apk add --allow-untrusted ./proxy-mode-core-1.1.2-r1.apk ./luci-app-proxy-mode-1.1.2-r1.apk
 proxy-mode status
 )
 ```
 
 The APKs are not signed by an official OpenWrt repository key. Check the manifest before installing. Full clean-install and reboot regression remain pending.
 
-## Automatic DNS bootstrap (v1.1.1)
+## Automatic DNS bootstrap (introduced in v1.1.1)
 
 For eligible single-hop or A-B VLESS configurations with an IPv4-resolvable first-hop hostname, one proxied HTTPS DNS server and no custom resolver/rules, the suite adds direct AliDNS HTTPS bootstrap (223.5.5.5, TLS dns.alidns.com), sets the first-hop and default domain resolvers, and keeps ordinary DNS on the existing proxied DoH. A-B detour is preserved. New/edited profiles and legacy modes prepared during switching/start/restart/recovery are normalized. A singleton IPv4 /32 TUN exclusion is treated as legacy and removed on eligible profiles; multiple exclusions are preserved. Literal addresses and custom resolvers are not automatically rewritten. AAAA-only first-hop hostnames are not supported by this normalization. Bootstrap and other default-resolver lookups can leave directly; this is not a zero-leak guarantee. Configuration validation and offline regression are not substitutes for device testing.
+
+## IPv6 uplink control-plane maintenance (v1.1.2)
+
+The device operator reproduced an IPv6 acquisition failure while an IPv4 TUN proxy was running: router solicitation and DHCPv6 requests were rejected by sing-box. Stopping the proxy temporarily restored IPv6 acquisition. The v1.1.2 preview is currently working according to the operator.
+
+The wrapper and three-second watchdog reconcile tagged nftables exceptions for neighbor discovery and link-local DHCPv6 on configured DHCPv6 interfaces that match an IPv4 default-route device, excluding LAN. These exceptions do not intentionally permit ordinary public IPv6 traffic or change forwarding. Before switching to a literal IPv6 node, the wrapper retries route readiness for up to 30 one-second iterations without stopping the current proxy. The existing independent IPv6 upstream guard remains in place. An explicit block policy still prevents switching to IPv6 upstream.
+
+A configured DHCPv6 interface and IPv6-capable upstream are prerequisites. No automatic network UCI provisioning is performed. Reboot, reconnect, address renewal and leakage regression are not yet fully verified; this remains a release candidate.
+
+### Optional wireless uplink IPv6 setup
+
+Only for a router already using the logical interface `wwan` and an IPv6-capable upstream. If a working DHCPv6 interface already exists, leave it unchanged. For wired WAN use the existing wan6 configuration instead. Use trusted LAN SSH; network reload may briefly disrupt connectivity. Back up the network configuration first.
+
+```sh
+(
+set -e
+umask 077
+uci -q get network.wwan >/dev/null
+if uci -q get network.wwan6 >/dev/null; then
+  echo 'wwan6 already exists; inspect rather than overwrite'
+  exit 1
+fi
+cp -p /etc/config/network "/root/network-before-wwan6-$(date +%Y%m%d-%H%M%S)"
+uci set network.wwan6=interface
+uci set network.wwan6.proto=dhcpv6
+uci set network.wwan6.device=@wwan
+uci set network.wwan6.reqaddress=try
+uci set network.wwan6.reqprefix=no
+uci set network.wwan6.peerdns=0
+uci set network.wwan6.delegate=0
+uci set network.wwan6.defaultroute=1
+uci set network.wwan6.auto=1
+uci commit network
+/etc/init.d/network reload
+ifup wwan6
+)
+```
+
+Ensure the DHCPv6 interface is assigned to the intended upstream firewall zone using LuCI if needed; do not weaken forwarding policy. Check `ifstatus wwan6`, `ip -6 route show table all`, and `nft list chain inet sing-box output_udp_icmp` for tagged bootstrap exceptions. Keep diagnostic addresses and logs private. A missing upstream route is not a JSON validation failure.
 
 ## Optional: change the LAN subnet
 
