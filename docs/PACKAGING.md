@@ -7,9 +7,9 @@ This project uses standard OpenWrt package Makefiles and builds two packages:
 
 The official OpenWrt `sing-box` package is not bundled.
 
-## v1.1.0 candidate
+## v1.1.1 candidate
 
-The release workflow builds proxy-mode-core-1.1.0-r1.apk and luci-app-proxy-mode-1.1.0-r1.apk from the same main commit. Release assets are usable only after the build succeeds. The source installer is also available; do not mix package ownership casually.
+The release workflow builds proxy-mode-core-1.1.1-r1.apk and luci-app-proxy-mode-1.1.1-r1.apk from the same main commit. Release assets are usable only after the build succeeds. The source installer is also available; do not mix package ownership casually.
 
 ## rc3 reference (historical)
 
