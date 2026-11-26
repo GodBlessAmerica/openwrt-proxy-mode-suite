@@ -15,7 +15,11 @@ sh /tmp/proxy-mode-install.sh
 
 The source installer installs missing official dependencies (including sing-box and LuCI), backs up existing suite files, preserves existing mode JSON and settings, and installs the IPv6 guard and watchdog. It does not flash firmware. Existing managed modes are preserved; a fresh installation without a managed mode stays unconfigured. RPC/LuCI services are restarted; keep LAN SSH available. This unified source entry point has not yet received separate fresh-device verification. Do not mix source upgrades with APK package management without considering file ownership.
 
-For reproducible APKs, see the [v1.1.1 candidate release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.1) when its build has published. Verify SHA256SUMS before installing; the official sing-box package must be installed first.
+For reproducible APKs, see the [v1.1.1 candidate release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.1) (build completed successfully). Verify SHA256SUMS before installing; the official sing-box package must be installed first.
+
+## Automatic DNS bootstrap (v1.1.1)
+
+For eligible single-hop or A-B VLESS configurations with an IPv4-resolvable first-hop hostname, one proxied HTTPS DNS server and no custom resolver/rules, the suite adds direct AliDNS HTTPS bootstrap (223.5.5.5, TLS dns.alidns.com), sets the first-hop and default domain resolvers, and keeps ordinary DNS on the existing proxied DoH. A-B detour is preserved. New/edited profiles and legacy modes prepared during switching/start/restart/recovery are normalized. A singleton IPv4 /32 TUN exclusion is treated as legacy and removed on eligible profiles; multiple exclusions are preserved. Literal addresses and custom resolvers are not automatically rewritten. AAAA-only first-hop hostnames are not supported by this normalization. Bootstrap and other default-resolver lookups can leave directly; this is not a zero-leak guarantee. Configuration validation and offline regression are not substitutes for device testing.
 
 ## IPv6 upstream
 
@@ -178,6 +182,7 @@ wget -O proxy-mode-suite.tar.gz \
 tar -xzf proxy-mode-suite.tar.gz
 mv openwrt-proxy-mode-suite-main openwrt-proxy-mode-suite
 cd openwrt-proxy-mode-suite
+sh scripts/test-dns-bootstrap.sh
 sh scripts/install.sh
 ```
 
