@@ -3,6 +3,45 @@
 set -eu
 set -f
 TABLE=proxy_mode_v6
+# Maintain only link-local control traffic on explicitly configured DHCPv6
+# uplinks. No public endpoint exception and no modification of LAN forwarding.
+if [ "${1:-}" = bootstrap ]; then
+    tmp="$(mktemp /tmp/proxy-v6-bootstrap.XXXXXX)"
+    trap 'rm -f "$tmp"' EXIT
+    devices=''
+    lan="$(ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@.l3_device')"
+    [ -n "$lan" ] || exit 1
+    for iface in $(uci show network | sed -n "s/^network\.\([a-zA-Z0-9_]*\)\.proto='dhcpv6'$/\1/p"); do
+        dev="$(ubus call "network.interface.$iface" status 2>/dev/null | jsonfilter -e '@.device')"
+        case "$dev" in ''|*[!a-zA-Z0-9_.-]*) continue;; esac
+        [ "$dev" != "$lan" ] || continue
+        # Restrict to the current IPv4 default uplink.
+        ip -4 route show default | awk -v d="$dev" '{for(i=1;i<NF;i++)if($i=="dev" && $(i+1)==d)ok=1} END{exit !ok}' || continue
+        case " $devices " in *" $dev "*) continue;; esac
+        devices="$devices $dev"
+    done
+    for chain in output output_udp_icmp; do
+        rules="$(nft -a list chain inet sing-box "$chain" 2>/dev/null)" || exit 1
+        # Only touch our own tagged rules. Avoid churn when exact rules already exist.
+        desired=0
+        for dev in $devices; do desired=$((desired+2)); done
+        actual="$(printf '%s\n' "$rules" | grep -c 'comment "proxy-mode-v6-bootstrap"' || true)"
+        good=1
+        [ "$actual" = "$desired" ] || good=0
+        for dev in $devices; do
+            n="$(printf '%s\n' "$rules" | grep -F "oifname \"$dev\"" | grep -c 'comment "proxy-mode-v6-bootstrap"' || true)"
+            [ "$n" = 2 ] || good=0
+        done
+        [ "$good" = 0 ] || continue
+        printf '%s\n' "$rules" | awk -v c="$chain" '/comment "proxy-mode-v6-bootstrap"/{print "delete rule inet sing-box " c " handle " $NF}' >> "$tmp"
+        for dev in $devices; do
+            printf 'insert rule inet sing-box %s oifname "%s" ip6 hoplimit 255 icmpv6 type { nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } counter return comment "proxy-mode-v6-bootstrap"\n' "$chain" "$dev" >> "$tmp"
+            printf 'insert rule inet sing-box %s oifname "%s" ip6 daddr { fe80::/10, ff02::1:2 } udp sport 546 udp dport 547 counter return comment "proxy-mode-v6-bootstrap"\n' "$chain" "$dev" >> "$tmp"
+        done
+    done
+    [ ! -s "$tmp" ] || nft -f "$tmp"
+    exit
+fi
 cfg="$1"
 action="$2"
 server="$(jsonfilter -i "$cfg" -e '@.outbounds[0].server' 2>/dev/null || true)"
