@@ -124,6 +124,25 @@ V6=/usr/libexec/proxy-mode-ipv6-upstream
 is_v6_mode() {
     case "$(jsonfilter -i "$1" -e '@.outbounds[0].server' 2>/dev/null)" in *:*) return 0;; *) return 1;; esac
 }
+v6_bootstrap() {
+    "$V6" bootstrap >/dev/null 2>&1 || true
+}
+v6_wait_route() {
+    # Do not stop the current proxy while waiting for the upstream.
+    v6_bootstrap
+    endpoint="$(jsonfilter -i "$1" -e '@.outbounds[0].server' 2>/dev/null)"
+    tries=0
+    while [ "$tries" -lt 30 ]; do
+        for src in $(ip -6 addr show scope global | awk '/inet6 [23]/{if ($0 !~ /tentative|dadfailed|deprecated/) {split($2,a,"/");print a[1]}}'); do
+            ip -6 route get "$endpoint" from "$src" >/dev/null 2>&1 && return 0
+        done
+        v6_bootstrap
+        sleep 1
+        tries=$((tries+1))
+    done
+    echo "IPv6 upstream route unavailable; check DHCPv6 uplink (wan6/wwan6)." >&2
+    return 1
+}
 v6_apply() {
     i=0
     while [ "$i" -lt 15 ]; do
@@ -170,6 +189,8 @@ v6_restart() {
 v6_switch() {
     target="$1"
     previous="$(uci -q get "$UCI_KEY" 2>/dev/null)"
+    [ "$(uci -q get sing-box.main.ipv6_mode)" != block ] || { echo "IPv6 upstream requires allow policy." >&2; return 1; }
+    v6_wait_route "$target" || return 1
     if v6_restart "$target"; then
         echo "IPv6 upstream started; independent LAN IPv6 guard active."
         return 0
@@ -199,6 +220,7 @@ recover_current() {
     sync_route_exclude_for_mode "$number"
     enable_service || return 1
     "$CORE" restart || return 1
+    v6_bootstrap
     sleep 2
     if dns_healthy; then
         echo "代理已在上游网络就绪后恢复。"
@@ -221,6 +243,7 @@ switch_safely() {
     sync_route_exclude_for_mode "$number" || return 1
     enable_service || return 1
     "$CORE" "$number" || return 1
+    v6_bootstrap
     sleep 2
 
     if dns_healthy; then
@@ -293,7 +316,8 @@ case "${1:-}" in
         [ -n "$number" ] || { echo "错误：当前没有已配置模式。" >&2; exit 1; }
         sync_route_exclude_for_mode "$number"
         enable_service || exit 1
-        "$CORE" "$1"
+        "$CORE" "$1" || exit $?
+        v6_bootstrap
         ;;
     ''|*[!0-9]*)
         "$CORE" "$@"
