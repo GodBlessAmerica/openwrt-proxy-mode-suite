@@ -7,9 +7,9 @@ This project uses standard OpenWrt package Makefiles and builds two packages:
 
 The official OpenWrt `sing-box` package is not bundled.
 
-## v1.1.1 candidate
+## v1.1.2 candidate
 
-The release workflow builds proxy-mode-core-1.1.1-r1.apk and luci-app-proxy-mode-1.1.1-r1.apk from the same main commit. Release assets are usable only after the build succeeds. The source installer is also available; do not mix package ownership casually.
+The release workflow builds proxy-mode-core-1.1.2-r1.apk and luci-app-proxy-mode-1.1.2-r1.apk from the same main commit. Release assets are usable only after the build succeeds. The source installer is also available; do not mix package ownership casually.
 
 ## rc3 reference (historical)
 
@@ -66,11 +66,11 @@ The workflow downloads the official SDK, prepares the package tree, builds both 
 
 ## Release assets
 
-The v1.1.1 release contains:
+The v1.1.2 release should contain:
 
 ```text
-proxy-mode-core-1.1.1-r1.apk
-luci-app-proxy-mode-1.1.1-r1.apk
+proxy-mode-core-1.1.2-r1.apk
+luci-app-proxy-mode-1.1.2-r1.apk
 SHA256SUMS
 ```
 
@@ -97,13 +97,14 @@ For full hardware acceptance:
 9. WWAN hotplug recovery restores the selected mode after upstream returns.
 10. Duplicate recovery triggers are serialized/skipped.
 11. `proxy-mode status` and local DNS health are normal.
-12. No real credentials, UUIDs, private keys or production mode files are present in source or release assets.
+12. IPv4 mode after reboot obtains/renews IPv6 uplink without stopping proxy; verify IPv4-to-IPv6 switching and reconnect, including upstream without IPv6.
+13. No real credentials, UUIDs, private keys or production mode files are present in source or release assets.
 
 ## Installing release packages
 
 ```sh
 sha256sum -c SHA256SUMS
-apk add --allow-untrusted ./proxy-mode-core-1.1.1-r1.apk ./luci-app-proxy-mode-1.1.1-r1.apk
+apk add --allow-untrusted ./proxy-mode-core-1.1.2-r1.apk ./luci-app-proxy-mode-1.1.2-r1.apk
 ```
 
 Install the official OpenWrt sing-box package first.
