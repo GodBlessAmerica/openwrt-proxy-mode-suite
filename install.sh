@@ -16,7 +16,7 @@ else
 fi
 tar -xzf "$D/source.tar.gz" -C "$D"
 ROOT="$D/openwrt-proxy-mode-suite-$REF"
-[ "$(cat "$ROOT/VERSION")" = 1.1.1 ] || { echo 'Unexpected source version' >&2; exit 1; }
+[ "$(cat "$ROOT/VERSION")" = 1.1.2 ] || { echo 'Unexpected source version' >&2; exit 1; }
 # Do not replace an existing sing-box binary or force dependency upgrades.
 missing=''
 for dep in sing-box jq nftables; do
