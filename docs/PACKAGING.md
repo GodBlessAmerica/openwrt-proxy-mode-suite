@@ -52,10 +52,10 @@ bin/packages/aarch64_cortex-a53/base/
 Workflow:
 
 ```text
-.github/workflows/build-openwrt-packages.yml
+.github/workflows/release-openwrt-packages.yml
 ```
 
-It is currently triggered manually with `workflow_dispatch` and defaults to:
+It runs on main when `.github/release-trigger` changes. The tag must match `VERSION`; package versions must match the intended release. It runs shell syntax checks and offline DNS bootstrap regression before compiling:
 
 ```text
 OpenWrt 25.12.5
@@ -66,11 +66,11 @@ The workflow downloads the official SDK, prepares the package tree, builds both 
 
 ## Release assets
 
-A rc3 release should contain:
+The v1.1.1 release contains:
 
 ```text
-proxy-mode-core-1.0.0-r13.apk
-luci-app-proxy-mode-1.0.0-r7.apk
+proxy-mode-core-1.1.1-r1.apk
+luci-app-proxy-mode-1.1.1-r1.apk
 SHA256SUMS
 ```
 
@@ -84,7 +84,7 @@ sha256sum -c SHA256SUMS
 
 ## Release smoke-test checklist
 
-Before publishing rc3:
+For full hardware acceptance:
 
 1. Fresh OpenWrt install has official sing-box but no Proxy Mode files.
 2. Suite installs with zero modes and reports `未配置`.
@@ -102,8 +102,8 @@ Before publishing rc3:
 ## Installing release packages
 
 ```sh
-apk add ./proxy-mode-core-*.apk
-apk add ./luci-app-proxy-mode-*.apk
+sha256sum -c SHA256SUMS
+apk add --allow-untrusted ./proxy-mode-core-1.1.1-r1.apk ./luci-app-proxy-mode-1.1.1-r1.apk
 ```
 
 Install the official OpenWrt sing-box package first.
