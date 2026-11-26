@@ -16,7 +16,7 @@ else
 fi
 tar -xzf "$D/source.tar.gz" -C "$D"
 ROOT="$D/openwrt-proxy-mode-suite-$REF"
-[ "$(cat "$ROOT/VERSION")" = 1.1.0 ] || { echo 'Unexpected source version' >&2; exit 1; }
+[ "$(cat "$ROOT/VERSION")" = 1.1.1 ] || { echo 'Unexpected source version' >&2; exit 1; }
 # Do not replace an existing sing-box binary or force dependency upgrades.
 missing=''
 for dep in sing-box jq nftables; do
@@ -25,5 +25,6 @@ for dep in sing-box jq nftables; do
 done
 [ -d /usr/share/luci ] || missing="$missing luci"
 if [ -n "$missing" ]; then apk update; apk add $missing; fi
+sh "$ROOT/scripts/test-dns-bootstrap.sh"
 sh "$ROOT/scripts/install.sh"
 echo "Source retained: $ROOT"
