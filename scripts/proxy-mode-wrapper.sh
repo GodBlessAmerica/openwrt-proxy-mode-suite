@@ -136,6 +136,7 @@ v6_wait_route() {
         for src in $(ip -6 addr show scope global | awk '/inet6 [23]/{if ($0 !~ /tentative|dadfailed|deprecated/) {split($2,a,"/");print a[1]}}'); do
             ip -6 route get "$endpoint" from "$src" >/dev/null 2>&1 && return 0
         done
+        v6_bootstrap
         sleep 1
         tries=$((tries+1))
     done
@@ -188,6 +189,7 @@ v6_restart() {
 v6_switch() {
     target="$1"
     previous="$(uci -q get "$UCI_KEY" 2>/dev/null)"
+    [ "$(uci -q get sing-box.main.ipv6_mode)" != block ] || { echo "IPv6 upstream requires allow policy." >&2; return 1; }
     v6_wait_route "$target" || return 1
     if v6_restart "$target"; then
         echo "IPv6 upstream started; independent LAN IPv6 guard active."
