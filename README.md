@@ -2,7 +2,7 @@
 
 Portable sing-box mode manager for OpenWrt with a LuCI GUI, dynamic modes, IPv6 leak protection, safe validation/rollback, upstream recovery, migration tools and reproducible OpenWrt package builds.
 
-> Current version: **v1.1.1 release candidate**. Reference environment: OpenWrt 25.12.5 on mediatek/filogic (RAX3000M), sing-box 1.13.18. The operator confirmed basic IPv6 upstream operation and working hostname-based A-B proxy operation on the RAX3000M. v1.1.1 adds independent bootstrap DNS for eligible single-hop and two-hop IPv4 hostname VLESS profiles, including legacy mode migration and compatibility with jq builds without Oniguruma. Full IPv4 regression, UDP end-to-end, reboot/reconnect and leak testing remain pending.
+> Current version: **v1.1.2 release candidate**. Reference environment: OpenWrt 25.12.5 on mediatek/filogic (RAX3000M), sing-box 1.13.18. The operator confirmed basic IPv6 upstream operation and working hostname-based A-B proxy operation on the RAX3000M. v1.1.1 introduced independent bootstrap DNS for eligible single-hop and two-hop IPv4 hostname VLESS profiles, including legacy mode migration and compatibility with jq builds without Oniguruma. Full IPv4 regression, UDP end-to-end, reboot/reconnect and leak testing remain pending.
 
 ## 一键安装 / 升级
 
@@ -15,15 +15,25 @@ sh /tmp/proxy-mode-install.sh
 
 The source installer installs missing official dependencies (including sing-box and LuCI), backs up existing suite files, preserves existing mode JSON and settings, and installs the IPv6 guard and watchdog. It does not flash firmware. Existing managed modes are preserved; a fresh installation without a managed mode stays unconfigured. RPC/LuCI services are restarted; keep LAN SSH available. This unified source entry point has not yet received separate fresh-device verification. Do not mix source upgrades with APK package management without considering file ownership.
 
-For reproducible APKs, see the [v1.1.1 candidate release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.1) (build completed successfully). Verify SHA256SUMS before installing; the official sing-box package must be installed first.
+For reproducible APKs, see the [v1.1.2 candidate release](https://github.com/GodBlessAmerica/openwrt-proxy-mode-suite/releases/tag/v1.1.2) (available after the build succeeds). Verify SHA256SUMS before installing; the official sing-box package must be installed first.
 
-## Automatic DNS bootstrap (v1.1.1)
+## Automatic DNS bootstrap (introduced in v1.1.1)
 
 For eligible single-hop or A-B VLESS configurations with an IPv4-resolvable first-hop hostname, one proxied HTTPS DNS server and no custom resolver/rules, the suite adds direct AliDNS HTTPS bootstrap (223.5.5.5, TLS dns.alidns.com), sets the first-hop and default domain resolvers, and keeps ordinary DNS on the existing proxied DoH. A-B detour is preserved. New/edited profiles and legacy modes prepared during switching/start/restart/recovery are normalized. A singleton IPv4 /32 TUN exclusion is treated as legacy and removed on eligible profiles; multiple exclusions are preserved. Literal addresses and custom resolvers are not automatically rewritten. AAAA-only first-hop hostnames are not supported by this normalization. Bootstrap and other default-resolver lookups can leave directly; this is not a zero-leak guarantee. Configuration validation and offline regression are not substitutes for device testing.
 
+## IPv6 uplink control-plane maintenance (v1.1.2)
+
+The device operator reproduced an IPv6 acquisition failure while an IPv4 TUN proxy was running: router solicitation and DHCPv6 requests were rejected by sing-box. Stopping the proxy temporarily restored IPv6 acquisition. The v1.1.2 preview is currently working according to the operator.
+
+The wrapper and three-second watchdog reconcile tagged nftables exceptions for neighbor discovery and link-local DHCPv6 on configured DHCPv6 interfaces that match an IPv4 default-route device, excluding LAN. These exceptions do not intentionally permit ordinary public IPv6 traffic or change forwarding. Before switching to a literal IPv6 node, the wrapper retries route readiness for up to 30 one-second iterations without stopping the current proxy. The existing independent IPv6 upstream guard remains in place. An explicit block policy still prevents switching to IPv6 upstream.
+
+A configured DHCPv6 interface and IPv6-capable upstream are prerequisites. No automatic network UCI provisioning is performed. Reboot, reconnect, address renewal and leakage regression are not yet fully verified; this remains a release candidate.
+
 ## IPv6 upstream
 
-A supported profile has a literal IPv6 VLESS first outbound and an IPv4-only TUN with auto_route and auto_redirect enabled. The router must already have a working IPv6 WAN/WWAN route; this suite does not provision WAN6. The IPv6 upstream path sets DNS strategy to ipv4_only if needed, installs an independent IPv6 guard, permits the configured upstream TCP endpoint, and reconciles missing sing-box nftables exceptions using a watchdog. This is not dual-stack LAN interception. Existing IPv4 profiles retain the original switching path. Use the existing allow policy for this IPv6 upstream mode; the independent guard still blocks forwarded IPv6. The temporary interactive ipv6-test command is intended for diagnostics, not ordinary mode switching.
+A supported profile has a literal IPv6 VLESS first outbound and an IPv4-only TUN with auto_route and auto_redirect enabled. The router must already have a working IPv6 WAN/WWAN route; this suite does not provision WAN6. The IPv6 upstream path sets DNS strategy to ipv4_only if needed, installs an independent IPv6 guard, permits the configured upstream TCP endpoint, and reconciles missing sing-box nftables exceptions using a watchdog. This is not dual-stack LAN interception. Existing IPv4 profiles retain their switching path with control-plane reconciliation. Use the existing allow policy for this IPv6 upstream mode; the independent guard still blocks forwarded IPv6. The temporary interactive ipv6-test command is intended for diagnostics, not ordinary mode switching.
+
+For optional WWAN6 setup and diagnostics, see [INSTALL.md](docs/INSTALL.md).
 
 ## Highlights
 
