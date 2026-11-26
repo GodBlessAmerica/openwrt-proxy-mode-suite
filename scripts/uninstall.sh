@@ -3,6 +3,7 @@ set -eu
 
 BACKUP=''
 [ ! -f /etc/proxy-mode-suite-last-backup ] || BACKUP="$(cat /etc/proxy-mode-suite-last-backup)"
+rm -f /usr/libexec/proxy-mode-dns-bootstrap
 rm -f /usr/libexec/proxy-mode-ui
 rm -f /usr/share/luci/menu.d/luci-app-proxy-mode.json
 rm -f /usr/share/rpcd/acl.d/luci-app-proxy-mode.json

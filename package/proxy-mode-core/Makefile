@@ -41,6 +41,7 @@ define Package/proxy-mode-core/install
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/preflight.sh $(1)/usr/bin/proxy-mode-preflight
 
 	$(INSTALL_DIR) $(1)/usr/libexec
+	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/dns-bootstrap.sh $(1)/usr/libexec/proxy-mode-dns-bootstrap
 	$(INSTALL_BIN) $(SUITE_ROOT)/core/usr/bin/proxy-mode $(1)/usr/libexec/proxy-mode-core
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/ipv6-upstream.sh $(1)/usr/libexec/proxy-mode-ipv6-upstream
 	$(INSTALL_BIN) $(SUITE_ROOT)/scripts/ipv6-upstream-test.sh $(1)/usr/libexec/proxy-mode-ipv6-test
