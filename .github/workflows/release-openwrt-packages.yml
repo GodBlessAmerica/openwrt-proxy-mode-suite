@@ -133,7 +133,7 @@ jobs:
           - ${LUCI_PACKAGE}
           - SHA256SUMS
 
-          Includes IPv6 VLESS upstream guard and watchdog, existing IPv4 mode management and LuCI, and independent bootstrap DNS for eligible single-hop and two-hop IPv4 hostname VLESS profiles. Candidate; full hardware regression and fresh installation remain pending.
+          Includes IPv6 VLESS upstream guard and watchdog, existing IPv4 mode management and LuCI, and independent bootstrap DNS for eligible single-hop and two-hop IPv4 hostname VLESS profiles. Adds scoped IPv6 neighbor discovery and DHCPv6 bootstrap reconciliation during IPv4 proxy operation and IPv6 route preflight. Operator reports preview currently working. Candidate; full reboot, reconnect, renewal, leak regression and fresh installation remain pending.
 
           Documentation:
           - README.md
